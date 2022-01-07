@@ -187,7 +187,7 @@ do_open(dbref player, dbref cause, int key, char *direction,
        key &= ~OPEN_ANSI;
     }
 
-    if (Immortal(player) && (*direction == '#')) {
+    if ( (Immortal(player) || HasPriv(player, NOTHING, POWER_USE_FREELIST, POWER5, NOTHING)) && (*direction == '#')) {
 	dir2 = get_free_num(player, direction);
         if ( (key & OBJECT_STRICT) && !validate_freematch(mudstate.free_num) ) {
            notify_quiet(player, "Dbref# specified is not a valid free dbref#.");
@@ -944,7 +944,7 @@ do_dig(dbref player, dbref cause, int key, char *name,
 	notify_quiet(player, "Dig what?");
 	return;
     }
-    if (Immortal(player) && (*name == '#')) {
+    if ( (Immortal(player) || HasPriv(player, NOTHING, POWER_USE_FREELIST, POWER5, NOTHING)) && (*name == '#')) {
 	name2 = get_free_num(player, name);
         if ( (key & OBJECT_STRICT) && !validate_freematch(mudstate.free_num) ) {
            notify_quiet(player, "Dbref# specified is not a valid free dbref#.");
@@ -1013,7 +1013,7 @@ do_create(dbref player, dbref cause, int key, char *name, char *coststr)
 	notify_quiet(player, "You can't create an object for less than nothing!");
 	return;
     }
-    if (Immortal(player) && (*name == '#')) {
+    if ( (Immortal(player) || HasPriv(player, NOTHING, POWER_USE_FREELIST, POWER5, NOTHING)) && (*name == '#')) {
 	name2 = get_free_num(player, name);
         if ( (key & OBJECT_STRICT) && !validate_freematch(mudstate.free_num) ) {
            notify_quiet(player, "Dbref# specified is not a valid free dbref#.");
@@ -1324,7 +1324,7 @@ do_pcreate(dbref player, dbref cause, int key, char *name, char *pass)
        }
        i_ansi = 1;
     }
-    if (Immortal(player) && (*name == '#')) {
+    if ( (Immortal(player) || HasPriv(player, NOTHING, POWER_USE_FREELIST, POWER5, NOTHING)) && (*name == '#')) {
 	name3 = get_free_num(player, name);
         if ( (key & OBJECT_STRICT) && !validate_freematch(mudstate.free_num) ) {
            notify_quiet(player, "Dbref# specified is not a valid free dbref#.");
@@ -1504,7 +1504,7 @@ destroy_exit(dbref player, dbref exit, int purge)
 	return;
     }
     if ((loc != Location(player)) && (loc != player)
-	&& !Admin(player)) {
+	&& !Admin(player) && !HasPriv(player, NOTHING, POWER_LONG_FINGERS, POWER3, NOTHING)) {
 	notify_quiet(player, "You can not destroy exits in another room.");
 	return;
     }
@@ -1672,7 +1672,7 @@ do_destroy(dbref player, dbref cause, int key, char *what)
 	return;
     }
     if (Indestructable(thing)) {
-	notify_quiet(player, "Sorry, that's indestructable.");
+	notify_quiet(player, "Sorry, that's indestructible.");
 	return;
     }
     if ( Cluster(thing)) {
@@ -1705,9 +1705,9 @@ do_destroy(dbref player, dbref cause, int key, char *what)
                   s_buffptr = (char *) strtok_r(NULL, " ", &tstrtokr), i++) {
                  i_array[i] = atoi(s_buffptr);
              }
-             if ( (i_array[3] != -1) && !((i_array[3] == -2) && ((Wizard(player) ? mudconf.wizmax_dest_limit : mudconf.max_dest_limit) == -1)) ) {
-                if ( (i_array[2]+1) > (i_array[3] == -2 ? (Wizard(player) ? mudconf.wizmax_dest_limit : mudconf.max_dest_limit) : i_array[3]) ) {
-                   notify_quiet(player,"@destruction limit maximum reached.");
+             if ( (i_array[3] != -1) && !((i_array[3] == -2) && ((Wizard(newplayer) ? mudconf.wizmax_dest_limit : mudconf.max_dest_limit) == -1)) ) {
+                if ( (i_array[2]+1) > (i_array[3] == -2 ? (Wizard(newplayer) ? mudconf.wizmax_dest_limit : mudconf.max_dest_limit) : i_array[3]) ) {
+                   notify_quiet(newplayer,"@destruction limit maximum reached.");
                    STARTLOG(LOG_SECURITY, "SEC", "DESTROY")
                      log_text("@destruction limit maximum reached -> Player: ");
                      log_name(newplayer);
@@ -1814,7 +1814,7 @@ do_nuke(dbref player, dbref cause, int key, char *name)
     if (thing != NOTHING) {
 	if (Typeof(thing) == TYPE_PLAYER) {
 	    if (Indestructable(thing)) {
-		notify_quiet(player, "Sorry, that player is indestructable.");
+		notify_quiet(player, "Sorry, that player is indestructible.");
 		return;
 	    }
 	    if (DePriv(player, thing, DP_NUKE, POWER6, NOTHING)) {
@@ -1834,7 +1834,7 @@ do_nuke(dbref player, dbref cause, int key, char *name)
                      newplayer = NOTHING;
                }
                if ( Good_chk(newplayer) ) {
-                  s_chkattr = atr_get(player, A_DESTVATTRMAX, &aowner2, &aflags2);
+                  s_chkattr = atr_get(newplayer, A_DESTVATTRMAX, &aowner2, &aflags2);
                   if ( *s_chkattr ) {
                      i_array[0] = i_array[2] = 0;
                      i_array[4] = i_array[1] = i_array[3] = -2;
@@ -1844,15 +1844,15 @@ do_nuke(dbref player, dbref cause, int key, char *name)
                          i_array[i] = atoi(s_buffptr);
                      }
                      if ( i_array[3] != -1 ) {
-                        if ( (i_array[2]+1) > (i_array[3] == -2 ? (Wizard(player) ? mudconf.wizmax_dest_limit : mudconf.max_dest_limit) : i_array[3]) ) {
-                           notify_quiet(player,"@destruction limit maximum reached.");
+                        if ( (i_array[2]+1) > (i_array[3] == -2 ? (Wizard(newplayer) ? mudconf.wizmax_dest_limit : mudconf.max_dest_limit) : i_array[3]) ) {
+                           notify_quiet(newplayer,"@destruction limit maximum reached.");
                            STARTLOG(LOG_SECURITY, "SEC", "NUKE")
                              log_text("@destruction limit maximum reached -> Player: ");
-                             log_name(player);
+                             log_name(newplayer);
                              log_text(" Object: ");
                              log_name(thing);
                            ENDLOG
-                           broadcast_monitor(player,MF_VLIMIT,"[NUKE] DESTROY MAXIMUM",
+                           broadcast_monitor(newplayer,MF_VLIMIT,"[NUKE] DESTROY MAXIMUM",
                                    NULL, NULL, thing, 0, 0, NULL);
                            free_lbuf(s_chkattr);
                            return;
@@ -1861,12 +1861,12 @@ do_nuke(dbref player, dbref cause, int key, char *name)
                      s_mbuf = alloc_mbuf("vattr_check");
                      sprintf(s_mbuf, "%d %d %d %d %d", i_array[0], i_array[1],
                                                     i_array[2]+1, i_array[3], i_array[4]);
-                     atr_add_raw(player, A_DESTVATTRMAX, s_mbuf);
+                     atr_add_raw(newplayer, A_DESTVATTRMAX, s_mbuf);
                      free_mbuf(s_mbuf);
                   } else {
                      s_mbuf = alloc_mbuf("vattr_check");
                      sprintf(s_mbuf, "0 -2 1 -2 %d", -2);
-                     atr_add_raw(player, A_DESTVATTRMAX, s_mbuf);
+                     atr_add_raw(newplayer, A_DESTVATTRMAX, s_mbuf);
                      free_mbuf(s_mbuf);
                   }
                   free_lbuf(s_chkattr);

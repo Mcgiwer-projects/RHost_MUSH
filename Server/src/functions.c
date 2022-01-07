@@ -740,7 +740,6 @@ static struct PENN_COLORMAP penn_namecolors[]= {
    {"grey100",  231},
    {"honeydew", 255 },
    {"honeydew1", 255 },
-   {"honeydew2",  194},
    {"honeydew2", 254 },
    {"honeydew3", 251 },
    {"honeydew4", 102 },
@@ -1335,7 +1334,7 @@ extern void totem_set(dbref, dbref, char *, int);
 
 int do_convtime(char *, struct tm *);
 
-/* pom.c nefinitions */
+/* pom.c definitions */
 /* #define PI_MUSH        3.14159265358 */
 #define PI_MUSH        3.14159265358979323846264338327950288419716939937510
 #define EPOCH_MUSH     85
@@ -1483,6 +1482,8 @@ do_date_conv(char *instr, char *outstr)
 /* %Y-%m-%d %I:%M:%S AM/PM */
       if ( stricmp(str7, (char *)"PM") == 0) {
          i_hour = atoi(str4) + 12;
+         if(i_hour > 23)
+             i_hour -= 12;
       } else {
          i_hour = atoi(str4);
       }
@@ -1495,6 +1496,8 @@ do_date_conv(char *instr, char *outstr)
 /* %Y-%m-%d %I:%M:%S AM/PM */
       if ( stricmp(str7, (char *)"PM") == 0) {
          i_hour = atoi(str4) + 12;
+         if(i_hour > 23)
+             i_hour -= 12;
       } else {
          i_hour = atoi(str4);
       }
@@ -1507,6 +1510,8 @@ do_date_conv(char *instr, char *outstr)
 /* %Y/%m/%d %I:%M:%S AM/PM */
       if ( stricmp(str7, (char *)"PM") == 0) {
          i_hour = atoi(str4) + 12;
+         if(i_hour > 23)
+             i_hour -= 12;
       } else {
          i_hour = atoi(str4);
       }
@@ -1519,6 +1524,8 @@ do_date_conv(char *instr, char *outstr)
 /* %Y/%m/%d %I:%M:%S AM/PM */
       if ( stricmp(str7, (char *)"PM") == 0) {
          i_hour = atoi(str4) + 12;
+         if(i_hour > 23)
+             i_hour -= 12;
       } else {
          i_hour = atoi(str4);
       }
@@ -1531,6 +1538,8 @@ do_date_conv(char *instr, char *outstr)
 /* %Y-%m-%d %I:%M AM/PM */
       if ( stricmp(str6, (char *)"PM") == 0) {
          i_hour = atoi(str4) + 12;
+         if(i_hour > 23)
+             i_hour -= 12;
       } else {
          i_hour = atoi(str4);
       }
@@ -1543,6 +1552,8 @@ do_date_conv(char *instr, char *outstr)
 /* %Y-%m-%d %I:%M AM/PM */
       if ( stricmp(str6, (char *)"PM") == 0) {
          i_hour = atoi(str4) + 12;
+         if(i_hour > 23)
+             i_hour -= 12;
       } else {
          i_hour = atoi(str4);
       }
@@ -1555,6 +1566,8 @@ do_date_conv(char *instr, char *outstr)
 /* %Y/%m/%d %I:%M AM/PM */
       if ( stricmp(str6, (char *)"PM") == 0) {
          i_hour = atoi(str4) + 12;
+         if(i_hour > 23)
+             i_hour -= 12;
       } else {
          i_hour = atoi(str4);
       }
@@ -1567,6 +1580,8 @@ do_date_conv(char *instr, char *outstr)
 /* %Y/%m/%d %I:%M AM/PM */
       if ( stricmp(str6, (char *)"PM") == 0) {
          i_hour = atoi(str4) + 12;
+         if(i_hour > 23)
+             i_hour -= 12;
       } else {
          i_hour = atoi(str4);
       }
@@ -1906,6 +1921,32 @@ mystrcat(char *dest, const char *src)
 
 /* Trim off leading and trailing spaces if the separator char is a space */
 
+char *
+trim_space_sep_multi(char *str, char *sep)
+{
+    char *p;
+
+    if (strcmp(sep, (char *)" ") != 0)
+       return str;
+
+    /* Trim start spaces */
+    while (*str && (*str == ' '))
+       str++;
+
+    /* Walk string to the end of the buffer */
+    for (p = str; *p; p++);
+
+    /* Walk backwards, stripping spaces */
+    for (p--; *p == ' ' && p > str; p--);
+
+    /* Advance to the space and set null */
+    p++;
+    *p = '\0';
+
+    return str;
+}
+
+/* Safe atof() function */
 char * trim_space_sep(char *str, char sep)
 {
     char *p;
@@ -2043,6 +2084,35 @@ char *next_token(char *str, char sep)
 /* split_token: Get next token from string as null-term string.  String is
  * destructively modified.
  */
+
+char *
+split_token_multi(char **sp, char *sep)
+{
+    char *str, *save, *tbuf;
+
+    save = str = *sp;
+    if (!str) {
+       *sp = NULL;
+       return NULL;
+    }
+
+    tbuf = strstr(str, sep);
+       
+    if (tbuf && *tbuf) {
+       str = tbuf;
+       *str = '\0';
+       str+=strlen(sep);
+
+       if ( strcmp(sep, (char *)" ") == 0 ) {
+          while (*str == ' ')
+             str++;
+       }
+    } else {
+       str = NULL;
+    }
+    *sp = str;
+    return save;
+}
 
 char * split_token(char **sp, char sep)
 {
@@ -2205,6 +2275,22 @@ get_list_type(char *fargs[], int nfargs, int type_pos,
     return autodetect_list(ptrs, nitems);
 }
 
+int
+list2arr_multi(char *arr[], int maxlen, char *list, char *sep)
+{
+    char *p;
+    int i;
+
+    list = trim_space_sep_multi(list, sep);
+
+    p = split_token_multi(&list, sep);
+
+    for (i = 0; p && i < maxlen; i++, p = split_token_multi(&list, sep)) {
+       arr[i] = p;
+    }
+    return i;
+}
+
 int list2arr(char *arr[], int maxlen, char *list, char sep)
 {
     char *p;
@@ -2217,6 +2303,22 @@ int list2arr(char *arr[], int maxlen, char *list, char sep)
     }
     return i;
 }
+
+/* -- uncomment when using
+static void
+arr2list_multi(char *arr[], int alen, char *list, char **listcx, char *sep)
+{
+    int i;
+    int gotone = 0;
+
+    for (i = 0; i < alen; i++) {
+        if( gotone )
+          safe_str(sep, list, listcx);
+        safe_str(arr[i], list, listcx);
+        gotone = 1;
+    }
+}
+*/
 
 static void
 arr2list(char *arr[], int alen, char *list, char **listcx, char sep)
@@ -2341,7 +2443,7 @@ fval(char *buff, char **bufcx, double result)
  */
 
 int fn_range_check_real(const char *fname, int nfargs, int minargs,
-       int maxargs, char *result, char **resultcx, int evenodd)
+       int maxargs, char *result, char **resultcx, int evenodd, char *sep, char *osep)
 {
     int i_return = 0;
 
@@ -2372,6 +2474,10 @@ int fn_range_check_real(const char *fname, int nfargs, int minargs,
           safe_str((char*)" ARGUMENTS [RECEIVED ", result, resultcx);
           ival(result, resultcx, nfargs);
           safe_chr(']', result, resultcx);
+          if ( sep )
+            free_lbuf(sep);
+          if ( osep )
+            free_lbuf(osep);
        } 
        return i_return;
     }
@@ -2386,6 +2492,10 @@ int fn_range_check_real(const char *fname, int nfargs, int minargs,
         safe_str((char*)" ARGUMENTS [RECEIVED ", result, resultcx);
         ival(result, resultcx, nfargs);
         safe_chr(']', result, resultcx);
+        if ( sep )
+           free_lbuf(sep);
+        if ( osep )
+           free_lbuf(osep);
     } else {
         safe_str((char*)"#-1 FUNCTION (", result, resultcx);
         safe_str((char*)fname, result, resultcx);
@@ -2396,6 +2506,10 @@ int fn_range_check_real(const char *fname, int nfargs, int minargs,
         safe_str((char*)" ARGUMENTS [RECEIVED ", result, resultcx);
         ival(result, resultcx, nfargs);
         safe_chr(']', result, resultcx);
+        if ( sep )
+           free_lbuf(sep);
+        if ( osep )
+           free_lbuf(osep);
     }
     return i_return;
 }
@@ -2403,6 +2517,49 @@ int fn_range_check_real(const char *fname, int nfargs, int minargs,
 /* ---------------------------------------------------------------------------
  * delim_check: obtain delimiter
  */
+
+int
+delim_check_multi(char *fargs[], int nfargs, int sep_arg, char *sep,
+    char *buff, char **bufcx, int eval, dbref player, dbref cause,
+                dbref caller, char *cargs[], int ncargs, int key)
+{
+   char *tstr;
+   int tlen;
+
+   if (nfargs >= sep_arg) {
+      tlen = strlen(fargs[sep_arg - 1]);
+      if (tlen <= 1) {
+         eval = 0;
+      }
+      if (eval) {
+         tstr = exec(player, cause, caller, EV_EVAL | EV_FCHECK,
+                     fargs[sep_arg - 1], cargs, ncargs, (char **)NULL, 0);
+         tlen = strlen(tstr);
+         if ( key && mudconf.delim_null && (tlen == 2) && (strcmp(tstr, (char *)"@@") == 0) ) {
+            tlen = 1;
+            strcpy(sep, (char *)"\032");
+         } else {
+            strcpy(sep, tstr);
+         }
+         free_lbuf(tstr);
+      }
+      if (tlen == 0) {
+         strcpy(sep, (char *)" ");
+      } else if (tlen != 1) {
+         if ( key && !eval && mudconf.delim_null && (tlen == 2) && (strcmp(fargs[sep_arg - 1], (char *)"@@") == 0) ) {
+            tlen = 1;
+            strcpy(sep, (char *)"\032");
+         } else  if ( !eval ) {
+            strcpy(sep, fargs[sep_arg - 1]);
+         }
+      } else if (!eval) {
+          strcpy(sep, fargs[sep_arg - 1]);
+      }
+   } else {
+      strcpy(sep, (char *)" ");   
+   }
+   return 1;
+}
 
 int delim_check(char *fargs[], int nfargs, int sep_arg, char *sep,
     char *buff, char **bufcx, int eval, dbref player, dbref cause,
@@ -2673,7 +2830,7 @@ do_spellnum(char *num, unsigned int len, char *buff, char **bufcx, int key)
    };
    static const char *singlesth[] = {
       "", "first", "second", "third", "forth",
-      "fifth", "sixth", "seventh", "eighth", "nineth", NULL
+      "fifth", "sixth", "seventh", "eighth", "ninth", NULL
    };
    static const char *special[] = {
       "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen",
@@ -4840,9 +4997,13 @@ FUNCTION(fun_textfile)
 
    it = player;
    t_val = i_suggest = 0;
-   if ( nfargs > 2 && *fargs[2] ) {
+   if ( (nfargs > 2) && *fargs[2] ) {
       t_val = atoi(fargs[2]);
-      t_val = (((t_val < 0) || (t_val > 2)) ? 0 : t_val);
+      t_val = (((t_val < 0) || (t_val > 7)) ? 0 : t_val);
+      if ( t_val & 4 ) {
+         t_val &= ~4;
+         t_val |= DYN_QUERY;
+      }
    }
    t_bufptr = t_buff = alloc_lbuf("fun_textfile");
    tmp_buff = alloc_lbuf("fun_textfile2");
@@ -4908,7 +5069,11 @@ FUNCTION(fun_dynhelp)
    t_val = i_suggest = 0;
    if ( (nfargs > 3) && *fargs[3] ) {
       t_val = atoi(fargs[3]);
-      t_val = (((t_val < 0) || (t_val > 2)) ? 0 : t_val);
+      t_val = (((t_val < 0) || (t_val > 7)) ? 0 : t_val);
+      if ( t_val & 4 ) {
+         t_val &= ~4;
+         t_val |= DYN_QUERY;
+      }
    }
    if ( (nfargs > 4) && *fargs[4] ) {
       i_suggest = atoi(fargs[4]);
@@ -5032,7 +5197,7 @@ FUNCTION(fun_dice)
        return;
     }
     tot = 0;
-/* This is safe as above arry can't be above 100 */
+/* This is safe as above array can't be above 100 */
     modval = (j - botval + 1);
     for (x = 0; x < i; x++) {
         arry[x] = (random() % modval) + botval;
@@ -5822,9 +5987,9 @@ FUNCTION(fun_entrances)
 }
 
 /* --------------------------------------------------------
- * elist returns list in english-language format
+ * elist returns list in English-language format
  * Idea was borrowed from Elendor with permission
- * elist(string,<string other than and>,<seperator>)
+ * elist(string,<string other than and>,<separator>)
  */
 FUNCTION(fun_elist)
 {
@@ -6482,6 +6647,7 @@ FUNCTION(fun_valid)
      }
      ival(buff, bufcx, i_tag);
   } else if (!stricmp(fargs[0], "locktype")) {
+     /* fargs[1] checked against null/empty above */
      i_tag = search_nametab(player, lock_sw, fargs[1]);
      ival(buff, bufcx, ((i_tag > 0) ? 1 : 0));
   } else if (!stricmp(fargs[0], "lockkey")) {
@@ -7251,7 +7417,7 @@ FUNCTION(fun_cmds)
    }
 }
 
-/* This function derivived from the pom.c code by Berkley */
+/* This function derived from the pom.c code by Berkley */
 FUNCTION(fun_moon)
 {
    struct tm *GMT, *ttm;
@@ -7318,7 +7484,7 @@ FUNCTION(fun_moon)
 
 /************************************************************************************
  * fun_pack   - pack into 64 base number - taken from MUX2 with permission and
- *              heavilly modified for Rhost
+ *              heavily modified for Rhost
  * fun_unpack - unpack from 64 base number - taken from MUX2 with permission
  * fun_crc32  - use crc32 bitmath - taken from MUX2 with permission
  ************************************************************************************/
@@ -7658,6 +7824,242 @@ unsigned int CRC32_ProcessBuffer( unsigned int ulCrc, const void *arg_pBuffer, u
     return ~ulCrc;
 }
 
+
+FUNCTION(fun_crc32obj)
+{
+   unsigned int ulCRC32, ulCRC32cmp;
+   char *as, *s_buff, *s_tmp, *s_passwd, *s_passtok, *s_passtokr, *s_store, *s_storeptr;
+   dbref aowner, thing;
+   int anum, anumsave, anumignore1, anumignore2, aflags, i_len, i_store;
+   ATTR *ap, *ap2;
+
+   if (!fn_range_check("CRC32OBJ", nfargs, 2, 4, buff, bufcx)) 
+      return;
+
+   thing = match_thing(player, fargs[0]);
+   if ( !Good_chk(thing) || !Controls(player, thing) ) {
+      safe_str((char *)"#-1 PERMISSION DENIED", buff, bufcx);
+      return;
+   }
+
+   if ( stricmp(fargs[1], "SHOW") ) {
+     if (mudstate.last_cmd_timestamp == mudstate.now) {
+         mudstate.heavy_cpu_recurse += 1;
+      }
+   }
+   if ( mudstate.heavy_cpu_recurse > mudconf.heavy_cpu_max ) {
+      safe_str("#-1 HEAVY CPU RECURSION LIMIT EXCEEDED", buff, bufcx);
+      return;
+   }
+
+   if ( stricmp(fargs[1], "SET") && 
+        stricmp(fargs[1], "CHK") && 
+        stricmp(fargs[1], "CALC") && 
+        stricmp(fargs[1], "UPDATE") && 
+        stricmp(fargs[1], "SHOW") ) {
+      safe_str((char *)"#-1 SECOND ARG MUST BE SET, CHK, CALC, UPDATE, OR SHOW", buff, bufcx);
+      return;
+   }
+
+   if ( !stricmp(fargs[1], "SET") && (nfargs < 3) ) {
+      safe_str((char *)"#-1 SET REQUIRES THIRD ARGUMENT FOR PASSWD", buff, bufcx);
+      return;
+   }
+
+   if ( !stricmp(fargs[1], "UPDATE") && !Immortal(player) ) {
+      safe_str((char *)"#-1 PERMISSION DENIED", buff, bufcx);
+      return;
+   }
+
+   anumsave = -1;
+   i_store = 0;
+   ap2 = atr_str("__CRC32");
+   if ( ap2 ) {
+      anumsave = ap2->number;
+   }
+
+   if ( (anumsave == -1) && (nfargs < 3) && stricmp(fargs[1], "CALC") ) {
+      safe_str((char *)"#-1 NO CRC", buff, bufcx);
+      return;
+   }
+  
+   s_tmp = atr_get(thing, anumsave, &aowner, &aflags);
+   if ( !*s_tmp  && (nfargs < 3) && stricmp(fargs[1], "CALC") ) {
+      free_lbuf(s_tmp);
+      safe_str((char *)"#-1 NO CRC", buff, bufcx);
+      return;
+   }
+
+   if ( !*s_tmp && stricmp(fargs[1], "SET") && stricmp(fargs[1], "CALC")) {
+      free_lbuf(s_tmp);
+      safe_str((char *)"#-1 NO CRC", buff, bufcx);
+      return;
+   }
+
+   s_passtok = NULL;
+   if ( !*s_tmp && (nfargs >= 3) ) {
+      i_store = 1;
+      ulCRC32 = 0;
+      i_len = strlen(fargs[2]);
+      ulCRC32 = CRC32_ProcessBuffer(ulCRC32, fargs[2], i_len);
+      s_storeptr = s_store = alloc_lbuf("crc32obj_store");
+      uival(s_store, &s_storeptr, ulCRC32);
+   } else if ( stricmp(fargs[1], "CALC") ) {
+      s_passwd = strtok_r(s_tmp, " ", &s_passtokr);
+      if ( s_passwd ) {
+         s_passtok = strtok_r(NULL, " ", &s_passtokr);
+      }
+   
+      if ( !s_passtok ) {
+         free_lbuf(s_tmp);
+         safe_str((char *)"#-1 CORRUPTED CRC", buff, bufcx);
+         return;
+      }
+      if ( nfargs >= 3 ) {
+         ulCRC32 = 0;
+         i_len = strlen(fargs[2]);
+         ulCRC32 = CRC32_ProcessBuffer(ulCRC32, fargs[2], i_len);
+         ulCRC32cmp = (unsigned int)safe_atof(s_passwd);
+         if ( (ulCRC32 != ulCRC32cmp) && 
+              !((nfargs > 3) && Immortal(player) && (atoi(fargs[3]) > 0)) ) {
+            free_lbuf(s_tmp);
+            safe_str((char *)"#-1 INVALID CRC PASSWD", buff, bufcx);
+            return;
+         }
+         i_store = 1;
+         s_storeptr = s_store = alloc_lbuf("crc32obj_store");
+         uival(s_store, &s_storeptr, ulCRC32);
+      }
+   }
+
+   if ( !stricmp(fargs[1], "SHOW") ) {
+     if ( s_passtok ) {
+       safe_str(s_passtok, buff, bufcx);
+       free_lbuf(s_tmp);
+       return;
+     } else {
+       uival(buff, bufcx, ulCRC32);
+       free_lbuf(s_tmp);
+       return;
+     }
+   }
+
+   anumignore1 = anumignore2 = -1;
+   ap2 = atr_str("__ATTRPIPE");
+   if ( ap2 ) {
+      anumignore1 = ap2->number;
+   }
+
+   ap2 = atr_str("_IDLESTAMP");
+   if ( ap2 ) {
+      anumignore2 = ap2->number;
+   }
+
+   ulCRC32 = 0;
+   s_buff = alloc_lbuf("crc32obj");
+   for (anum = atr_head(thing, &as); anum; anum = atr_next(&as)) {
+      ap = atr_num(anum);   
+      if ( !ap ) {
+         continue;
+      }
+       
+      if ( (ap->flags & AF_INTERNAL) ||
+           (ap->number == anumsave) ||
+           (ap->number == anumignore1) ||
+           (ap->number == anumignore2) ||
+           (ap->number == A_CHARGES) ||
+           (ap->number == A_MONEY) ||
+           (ap->number == A_LAST) ||
+           (ap->number == A_QUEUEMAX) ||
+           (ap->number == A_RQUOTA) ||
+           (ap->number == A_NAME) ||
+           (ap->number == A_SEMAPHORE) ||
+           (ap->number == A_QUOTA) ||
+           (ap->number == A_PRIVS) ||
+           (ap->number == A_LOGINDATA) ||
+           (ap->number == A_LASTSITE) ||
+           (ap->number == A_LAMBDA) ||
+           (ap->number == A_BCCMAIL) ||
+           (ap->number == A_MPSET) ||
+           (ap->number == A_MPASS) ||
+           (ap->number == A_LASTPAGE) ||
+           (ap->number == A_RETPAGE) ||
+           (ap->number == A_MCURR) ||
+           (ap->number == A_MQUOTA) ||
+           (ap->number == A_LQUOTA) ||
+           (ap->number == A_TQUOTA) ||
+           (ap->number == A_MTIME) ||
+           (ap->number == A_MSAVEMAX) ||
+           (ap->number == A_MSAVECUR) ||
+           (ap->number == A_IDENT) ||
+           (ap->number == A_TOTCMDS) ||
+           (ap->number == A_LSTCMDS) ||
+           (ap->number == A_MODIFY_TIME) ||
+           (ap->number == A_TOTCHARIN) ||
+           (ap->number == A_TOTCHAROUT) ||
+           (ap->number == A_LASTCREATE) ||
+           (ap->number == A_SAVESENDMAIL) ||
+           (ap->number == A_PROGBUFFER) ||
+           (ap->number == A_PROGPROMPT) ||
+           (ap->number == A_PROGPROMPTBUF) ||
+           (ap->number == A_TEMPBUFFER) ||
+           (ap->number == A_DESTVATTRMAX) ||
+           (ap->number == A_LASTIP) ||
+           (ap->number == A_OBJECTTAG) ||
+           (ap->number == A_CREATED_TIME) ||
+           (ap->number == A_MODIFY_TIME) ||
+           ((ap->number >= 252) && (ap->number <= 255)) ) {
+         continue;
+      }
+      (void) atr_get_str(s_buff, thing, ap->number, &aowner, &aflags);
+      i_len = strlen(s_buff);
+      ulCRC32 = CRC32_ProcessBuffer(ulCRC32, s_buff, i_len);
+   }
+   free_lbuf(s_buff);
+
+   if ( !i_store && !stricmp(fargs[1], "UPDATE") ) {
+      i_store = 1;
+      s_storeptr = s_store = alloc_lbuf("crc32obj_store");
+      safe_str(s_passwd, s_store, &s_storeptr);
+   }
+
+   if ( i_store ) {
+      safe_chr(' ', s_store, &s_storeptr);
+      uival(s_store, &s_storeptr, ulCRC32);
+      if ( anumsave == -1 ) {
+         anumsave = mkattr("__CRC32");
+      }
+      if ( anumsave < 0 ) {
+         notify_quiet(player, "#-1 UNABLE TO SET CRC");
+      } else {
+         atr_add_raw(thing, anumsave, s_store);
+         atr_set_flags(thing, anumsave, AF_INTERNAL|AF_GOD);
+         uival(buff, bufcx, ulCRC32);
+      }
+      free_lbuf(s_store);
+   } else {
+      if ( !stricmp(fargs[1], "CALC") ) { 
+         uival(buff, bufcx, ulCRC32);
+      } else {
+         if ( s_passtok ) {
+            if ( (unsigned int)safe_atof(s_passtok) == ulCRC32 ) {
+               uival(buff, bufcx, ulCRC32);
+               safe_str(" CRC OK", buff, bufcx);
+            } else {
+               uival(buff, bufcx, ulCRC32);
+               safe_str(" CRC MISSMATCH [", buff, bufcx);
+               uival(buff, bufcx, (unsigned int)safe_atof(s_passtok));
+               safe_chr(']', buff, bufcx);
+            }
+         } else {
+            uival(buff, bufcx, ulCRC32);
+            safe_str(" CRC OK", buff, bufcx);
+         }
+      }
+   }
+   free_lbuf(s_tmp);
+}
+
 FUNCTION(fun_crc32)
 {
    unsigned int ulCRC32;
@@ -7867,7 +8269,7 @@ FUNCTION(fun_lookup_site)
                if ( c_type == 1 ) {
                   safe_str(inet_ntoa(d->address.sin_addr), buff, bufcx);
                } else {
-                  safe_str(d->addr, buff, bufcx);
+                  safe_str(d->longaddr, buff, bufcx);
                }
             }
          }
@@ -8734,11 +9136,11 @@ FUNCTION(fun_time)
  * FOMATTING:
  * '$' - don't treat the previous $ as the start of a format
  * '-' - left justify field
- * Num - Width of next field, numbers begining in '0' denote zero padded fields
+ * Num - Width of next field, numbers beginning in '0' denote zero padded fields
  * '!' - Omit field print if 0 value. No further literal strings will be
  *       printed until a literal '!' is encountered.
  *
- * '~' - Omit field as with '!' but preserve field width, ie. blank pad the
+ * '~' - Omit field as with '!' but preserve field width, i.e. blank pad the
  *       field.
  *       No further literal strings will be printed until a literal '~' is
  *       encountered.
@@ -8776,8 +9178,8 @@ FUNCTION(fun_time)
  * 'I' - offset of timezone in seconds from GMT
  *
  * ELAPSED TIME:
- * 'm' - Elapsed milleniums (0..??)
- * 'U' - Elapsed century in millinium (0..9)
+ * 'm' - Elapsed millenniums (0..??)
+ * 'U' - Elapsed century in millennium (0..9)
  * 'u' - Elapsed year in century (0..99)
  * 'Z' - Elapsed years (0..??)
  * 'E' - Elapsed months within year (0..12)
@@ -10670,7 +11072,7 @@ FUNCTION(fun_printf)
                         fm.fieldsupress2 = 1;
                         formatpass = 1;
                         break;
-                     case '.': /* supress last line if all fields null */
+                     case '.': /* suppress last line if all fields null */
                         fm.nolaster = 1;
                         formatpass = 1;
                         break;
@@ -11011,15 +11413,14 @@ FUNCTION(fun_printf)
 #define MUSH_TDAY	30.416667
 FUNCTION(fun_timefmt)
 {
-  char* pp;
+  char *pp, *fmtbuff, *s_aptz, *s_aptztmp;
   time_t secs, i_frell;
   double secs2;
-  char* fmtbuff;
-  int formatpass = 0;
-  int fmterror = 0;
-  int fmtdone = 0;
+  int formatpass = 0, fmterror = 0, fmtdone = 0, i_aptz, aflags;
+  dbref aowner;
   long l_offset = 0;
   TZONE_MUSH *tzmush;
+  ATTR *aptz;
   struct tm *tms, *tms2, *tms3;
 
   static char* shortdayname[] = { "Sun", "Mon", "Tue", "Wed",
@@ -11046,6 +11447,7 @@ FUNCTION(fun_timefmt)
   secs2 = safe_atof(fargs[1]);
   /* tms2 = localtime(&secs); */
   tms2 = localtime(&mudstate.now);
+
 
   tzmush = NULL;
   i_frell = 0;
@@ -11077,10 +11479,37 @@ FUNCTION(fun_timefmt)
   }
  
   if ( !tzmush ) {
+     s_aptz = alloc_lbuf("timefmt_tzmatch");
+     aptz = atr_str("TZ");
+     if ( aptz ) {
+        s_aptztmp = atr_pget(player, aptz->number, &aowner, &aflags);
+        sprintf(s_aptz, " %s ", s_aptztmp);
+        free_lbuf(s_aptztmp);
+        s_aptztmp = s_aptz;
+        while ( *s_aptztmp ) {
+           *s_aptztmp = ToUpper(*s_aptztmp);
+           s_aptztmp++;
+        }
+     }
+     
+     /* Test against player's specific timezones */
+     s_aptztmp = alloc_sbuf("timeffmt_tzmatch");
+     i_aptz = 0;
      for ( tzmush = timezone_list; tzmush->mush_tzone != NULL; tzmush++ ) {
-/*      if ( tzmush->mush_offset == -(timezone) ) { */
-        if ( (int)(tzmush->mush_offset) == -((int)timezone) ) {
+        sprintf(s_aptztmp, " %.20s ", tzmush->mush_tzone);
+        if ( (strstr(s_aptz, s_aptztmp) != NULL) && ((int)(tzmush->mush_offset) == -((int)timezone)) ) {
+           i_aptz = 1;
            break;
+        }
+     }
+     free_sbuf(s_aptztmp);
+     free_lbuf(s_aptz);
+
+     if ( !i_aptz ) {
+        for ( tzmush = timezone_list; tzmush->mush_tzone != NULL; tzmush++ ) {
+           if ( (int)(tzmush->mush_offset) == -((int)timezone) ) {
+              break;
+           }
         }
      }
   }
@@ -11507,13 +11936,13 @@ FUNCTION(fun_timefmt)
                 showfield(fmtbuff, buff, bufcx, &fm, 1);
                 fmtdone = 1;
                 break;
-             case 'm': /* elapsed milleniums (365 day year) */
+             case 'm': /* elapsed millenniums (365 day year) */
                 fm.lastval = (int) (secs2 / 60 / 60 / 24 / 365 / 1000);
                 sprintf(fmtbuff, "%d", fm.lastval);
                 showfield(fmtbuff, buff, bufcx, &fm, 1);
                 fmtdone = 1;
                 break;
-             case 'U': /* elapsed century in millenium (365 day year) */
+             case 'U': /* elapsed century in millennium (365 day year) */
                 fm.lastval = (int) (fmod( (secs2 / 60 / 60 / 24 / 365 / 100), 10));
                 if ( ((int) fmod( (secs2 / 60 / 60 / 24 / 365) , 100)) < 0 )
                    fm.lastval--;
@@ -12183,8 +12612,8 @@ crypt_code(char *code, char *text, int type)
     p = text;
     q = codebuff;
     r = textbuff;
-    /* Encryption: Simply go through each character of the text, get its ascii
-       value, subtract start, add the ascii value (less start) of the
+    /* Encryption: Simply go through each character of the text, get its ASCII
+       value, subtract start, add the ASCII value (less start) of the
        code, mod the result, add start. Continue  */
     while (*p) {
        if ((*p < start) || (*p > end)) {
@@ -14248,7 +14677,11 @@ FUNCTION(fun_zfuneval)
 
     i_extra = 0;
     if (mudstate.evalnum < MAXEVLEVEL) {
-       tlev = search_nametab(player, evaltab_sw, lbuf);
+       if ( lbuf && *lbuf ) {
+          tlev = search_nametab(player, evaltab_sw, lbuf);
+       } else {
+          tlev = -1;
+       }
        free_lbuf(lbuf);
        if ( tlev == 6 ) {
           tlev = -1;
@@ -14314,7 +14747,11 @@ FUNCTION(fun_streval)
 
     result = exec(player, cause, player, EV_FCHECK | EV_EVAL, fargs[1], cargs, ncargs, (char **)NULL, 0);
     if (mudstate.evalnum < MAXEVLEVEL) {
-       tlev = search_nametab(player, evaltab_sw, result);
+       if ( result && *result ) {
+          tlev = search_nametab(player, evaltab_sw, result);
+       } else {
+          tlev = -1;
+       }
        if (God(player)) {
            if (tlev > 5)
               tlev = -1;
@@ -14447,7 +14884,11 @@ do_ueval(char *buff, char **bufcx, dbref player, dbref cause, dbref caller,
     }
     i_extra = 0;
     if (mudstate.evalnum < MAXEVLEVEL) {
-       tlev = search_nametab(player, evaltab_sw, lbuf);
+       if ( lbuf && *lbuf ) {
+          tlev = search_nametab(player, evaltab_sw, lbuf);
+       } else {
+          tlev = -1;
+       }
        free_lbuf(lbuf);
        if ( tlev == 6 ) {
           tlev = -1;
@@ -14794,7 +15235,7 @@ FUNCTION(fun_parenmatch)
        free_lbuf(atext);
        return;
     }
-    /* String is too long to do anything with anwyay.  Just return it */
+    /* String is too long to do anything with anyway.  Just return it */
     if ( strlen(atext) > (LBUF_SIZE - 14) ) {
         safe_str(atext, buff, bufcx);
         free_lbuf(atext);
@@ -16556,41 +16997,113 @@ FUNCTION(fun_u2ldefault)
  ******************************************************************/
 FUNCTION(fun_elementsmux)
 {
-   int nwords, cur, bFirst;
-   char *ptrs[LBUF_SIZE / 2];
-   char *wordlist, *s, *r, sep, osep;
+   int nwords, cur, bFirst, i_loop, i_len, i_ansiaware;
+   char *ptrs[LBUF_SIZE / 2], *s_output, *s_tbuf, *s_tbufptr;
+   char *s, *r, *sep, *osep, *outbuff, *osepbuff;
+   ANSISPLIT outsplit[LBUF_SIZE], outsplit2[LBUF_SIZE], insplit[LBUF_SIZE], *p_in;
 
-   svarargs_preamble("ELEMENTSMUX", 4);
+   
+   /* Fifth argument toggles ansi-aware or not */
+   if (!fn_range_check("ELEMENTSMUX", nfargs, 2, 5, buff, bufcx)) {
+      return;
+   }
+
+   sep = alloc_lbuf("fun_elementsmux_sep");
+   osep = alloc_lbuf("fun_elementsmux_osep");
+   if ( (nfargs > 2) && *fargs[2] )
+      strcpy(sep, fargs[2]);
+   else
+      strcpy(sep, (char *)" ");
+   if ( (nfargs > 3) && *fargs[3] ) 
+      strcpy(osep, fargs[3]);
+   else
+      strcpy(osep, sep);
+
+   if ( mudconf.delim_null && (strcmp(osep, (char *)"@@") == 0) ) {
+      strcpy(osep, "\032");
+   }
+
+   i_ansiaware = 0;
+   if ( (nfargs > 4) && *fargs[4] ) {
+      i_ansiaware = (atoi(fargs[4]) ? 1 : 0);
+   }
 
    bFirst = 1;
 
-   /* Turn the first list into an array. */
-   wordlist = alloc_lbuf("fun_elements.wordlist");
+   outbuff = alloc_lbuf("fun_elementsmuxout");
+   if ( i_ansiaware ) {
+      initialize_ansisplitter(outsplit, LBUF_SIZE);
+      initialize_ansisplitter(outsplit2, LBUF_SIZE);
+      initialize_ansisplitter(insplit, LBUF_SIZE);
+      s_tbufptr = s_tbuf = alloc_lbuf("fun_elementsmuxansi");
+      osepbuff = alloc_lbuf("fun_elementsmuxosep");
+      memset(outbuff, '\0', LBUF_SIZE);
+      memset(osepbuff, '\0', LBUF_SIZE);
+      split_ansi(strip_ansi(fargs[0]), outbuff, outsplit);
+      nwords = list2arr_multi(ptrs, LBUF_SIZE / 2, outbuff, sep);
+   } else {
+      strcpy(outbuff, fargs[0]);
+      nwords = list2arr_multi(ptrs, LBUF_SIZE / 2, outbuff, sep);
+   }
 
-   /* Same size - no worries */
-   strcpy(wordlist, fargs[0]);
-   nwords = list2arr(ptrs, LBUF_SIZE / 2, wordlist, sep);
-   s = trim_space_sep(fargs[1], ' ');
+   s = trim_space_sep_multi(fargs[1], (char *)" ");
 
   /* Go through the second list, grabbing the numbers and finding the
    * corresponding elements.
    */
 
+   if ( i_ansiaware ) {
+      split_ansi(strip_ansi(osep), osepbuff, outsplit2);
+      p_in = insplit;
+      i_len = strlen(osepbuff);
+   }
    do {
-      r = split_token(&s, ' ');
+      r = split_token_multi(&s, (char *)" ");
       cur = atoi(r) - 1;
       if ( cur < 0 ) {
          cur += nwords + 1;
       }
       if (  (cur >= 0) && (cur < nwords) && ptrs[cur]) {
          if (!bFirst) {
-            safe_chr(osep, buff, bufcx);
+            if ( i_ansiaware ) {
+               for ( i_loop = 0; i_loop < i_len; i_loop++ ) {
+                  if ( safe_chr(*(osepbuff+i_loop), s_tbuf, &s_tbufptr) == 0 ) {
+                     if ( *(osepbuff+i_loop) != '\032' ) {
+                        clone_ansisplitter(p_in, outsplit2+i_loop);
+                        p_in++;
+                     }
+                  }
+               }
+           } else {
+              safe_str(osep, buff, bufcx);
+           }
          }
          bFirst = 0;
-         safe_str(ptrs[cur], buff, bufcx);
+         if ( i_ansiaware ) {
+            for ( i_loop = 0; i_loop < strlen(ptrs[cur]); i_loop++) {
+               if ( safe_chr(*(ptrs[cur]+i_loop), s_tbuf, &s_tbufptr) == 0 ) {
+                  clone_ansisplitter(p_in, outsplit+(ptrs[cur]-outbuff+i_loop));
+                  p_in++;
+               }
+            }
+         } else {
+            safe_str(ptrs[cur], buff, bufcx);
+         }
       }
    } while (s);
-   free_lbuf(wordlist);
+
+   if ( i_ansiaware ) {
+      s_output = rebuild_ansi(s_tbuf, insplit, 0);
+      safe_str(s_output, buff, bufcx);
+
+      free_lbuf(s_tbuf);
+      free_lbuf(s_output);
+      free_lbuf(osepbuff);
+   }
+
+   free_lbuf(outbuff);
+   free_lbuf(sep);
+   free_lbuf(osep);
 }
 
 /* Elements -- does not respect null values */
@@ -18070,7 +18583,7 @@ FUNCTION(fun_execscript)
          memset(s_inread, '\0', LBUF_SIZE);
          fgets(s_inread, LBUF_SIZE - 1, fp);
          sptr = s_inread;
-         /* convert to a '?' non-printable non-ascii-7 chars */
+         /* convert to a '?' non-printable non-ASCII-7 chars */
          while ( *sptr ) {
             if ( !((isprint(*sptr) || (*sptr == BEEP_CHAR) || isspace(*sptr)) && isascii(*sptr)) )
                *sptr = '?';
@@ -18114,7 +18627,7 @@ FUNCTION(fun_execscript)
                continue;
             }
             sptr = s_inread;
-            /* convert to a '?' non-printable non-ascii-7 chars */
+            /* convert to a '?' non-printable non-ASCII-7 chars */
             while ( *sptr ) {
                if ( !((isprint(*sptr) || (*sptr == BEEP_CHAR) || isspace(*sptr)) && isascii(*sptr)) )
                   *sptr = '?';
@@ -19042,11 +19555,11 @@ FUNCTION(fun_race)
 FUNCTION(fun_name)
 {
     dbref it;
-    int i_flags;
     char *s;
     char *namebuff,
          *namebufcx;
 #ifdef USE_SIDEEFFECT
+    int i_flags;
     CMDENT *cmdp;
 #endif
 
@@ -25127,6 +25640,28 @@ FUNCTION(fun_ldepowers)
     }
 }
 
+FUNCTION(fun_limits)
+{
+    char *s_chkattr;
+    int aflags;
+    dbref target, aowner;
+
+    target = lookup_player(player, fargs[0], 0);
+    if ( !Good_chk(target) || !controls(player, target)) {
+       safe_str("#-1", buff, bufcx);
+       return;
+    }
+
+    s_chkattr = NULL;
+    s_chkattr = atr_get(target, A_DESTVATTRMAX, &aowner, &aflags);
+
+    if( *s_chkattr)
+       safe_str(s_chkattr, buff, bufcx);
+    else
+       safe_str("0 -2 0 -2 -2", buff, bufcx);
+    free_lbuf(s_chkattr);
+}
+
 FUNCTION(fun_error)
 {
     dbref target;
@@ -25241,7 +25776,11 @@ FUNCTION(fun_lock)
            return;
         }
         if (parse_thing_slash(player, fargs[0], &str, &it)) {
-           anum = search_nametab(player, lock_sw, str);
+           if ( str && *str ) {
+              anum = search_nametab(player, lock_sw, str);
+           } else {
+              anum = -1;
+           }
         } else if ( str == NULL && !Good_obj(it) ) {
            anum = A_LOCK;
            it = lookup_player(player, fargs[0], 0);
@@ -25776,7 +26315,7 @@ FUNCTION(fun_caplist)
 	    }
 	    break;
 
-        // True capitilization -- Title NIVA standards
+        // True capitalization -- Title NIVA standards
         case 'T': /* True capitalization */
            i_found = 0;
            if ( i_first && (i_last != i_lastchk) && *(mudconf.cap_conjunctions) ) {
@@ -27517,7 +28056,7 @@ FUNCTION(fun_merge)
 }
 
 /* ---------------------------------------------------------------------------
- * fun_splice: similar to MERGE(), eplaces by word instead of by character.
+ * fun_splice: similar to MERGE(), replaces by word instead of by character.
  */
 
 FUNCTION(fun_splice)
@@ -28437,8 +28976,8 @@ FUNCTION(fun_citer)
  * fun_list:
  * This works just like iter() except it uses notify() to bypass
  * the buffer limitations.
- * Eventhough this is considered a side-effect it's harmless so
- * will be seperate from the normal list of 'side-effects'
+ * Even though this is considered a side-effect it's harmless so
+ * will be separate from the normal list of 'side-effects'
  */
 
 FUNCTION(fun_list)
@@ -28548,7 +29087,7 @@ FUNCTION(fun_list)
  *    is passed as %0 and the second is %1.  The attrib is then evaluated
  *    with these args, the result is then used as %0 and the next arg is
  *    %1 and so it goes as there are elements left in the list.  The
- *    optinal base case gives the user a nice starting point.
+ *    optional base case gives the user a nice starting point.
  *
  *    > &REP_NUM object=[%0][repeat(%1,%1)]
  *    > say fold(OBJECT/REP_NUM,1 2 3 4 5,->)
@@ -28920,7 +29459,7 @@ FUNCTION(fun_fold)
     ATTR *ap;
     char *atext, *result, *curr, *cp, *atextbuf, *clist[2], *rstore, sep;
 
-    /* We need two to four arguements only */
+    /* We need two to four arguments only */
 
     mvarargs_preamble("FOLD", 2, 4);
 
@@ -29478,7 +30017,7 @@ FUNCTION(fun_parsestr)
      return;
    }
 
-   /* Handle FARGS0 -- Morgify input string */
+   /* Handle FARGS0 -- Morgrify input string */
    s_tmpbuff = exec(player, cause, caller, EV_STRIP | EV_FCHECK | EV_EVAL,
                    fargs[0], cargs, ncargs, (char **)NULL, 0);
    if ( !*s_tmpbuff ) {
@@ -29489,7 +30028,7 @@ FUNCTION(fun_parsestr)
    safe_str(strip_ansi(s_tmpbuff), s_fargs0, &args_ptr);
    free_lbuf(s_tmpbuff);
 
-   /* Handle FARGS2 -- seperator */
+   /* Handle FARGS2 -- separator */
    if ( (nfargs > 2) && *fargs[2] ) {
       s_tmpbuff = exec(player, cause, caller, EV_STRIP | EV_FCHECK | EV_EVAL,
                        fargs[2], cargs, ncargs, (char **)NULL, 0);
@@ -29605,7 +30144,7 @@ FUNCTION(fun_parsestr)
    savebuff[1] = alloc_lbuf("fun_parsestr_savebuff1");  /* Optional Target Player */
    savebuff[2] = alloc_lbuf("fun_parsestr_savebuff2");
    savebuff[3] = alloc_lbuf("fun_parsestr_savebuff3");
-   savebuff[4] = alloc_lbuf("fun_parsestr_savebuff4");  /* Transofmration character */
+   savebuff[4] = alloc_lbuf("fun_parsestr_savebuff4");  /* Transformation character */
    savebuff[5] = NULL;
 
    /* Set up target */
@@ -29886,6 +30425,31 @@ FUNCTION(fun_map)
 /* ---------------------------------------------------------------------------
  * fun_edit: Edit text.
  */
+
+FUNCTION(fun_medit)
+{
+    char *tstr, *tbuff;
+    int i_args;
+
+    if ( (nfargs < 3) || ((nfargs % 2) == 0) ) {
+       safe_str((char*)"#-1 FUNCTION (MEDIT) EXPECTS AN ODD NUMBER OF ARGUMENTS OF 3 OR MORE [RECEIVED ", buff, bufcx);
+       ival(buff, bufcx, nfargs);
+       safe_chr(']', buff, bufcx);
+       return;
+    }
+    
+    tbuff = alloc_lbuf("fun_medit_buffer");
+    strcpy(tbuff, fargs[0]);
+    i_args = 1;
+    while ( i_args < nfargs ) {
+       edit_string(tbuff, &tstr, (char **)NULL, fargs[i_args], fargs[i_args+1], 1, 0, 0, 0);
+       strcpy(tbuff, tstr);
+       free_lbuf(tstr);
+       i_args+=2;
+   }
+   safe_str(tbuff, buff, bufcx);
+   free_lbuf(tbuff);
+}
 
 FUNCTION(fun_edit)
 {
@@ -30335,7 +30899,7 @@ FUNCTION(fun_squish)
 }
 
 /* ---------------------------------------------------------------------------
- * fun_subnetmatch: Return value based on wether specified ip address is part
+ * fun_subnetmatch: Return value based on whether specified ip address is part
  * of the specified ip/CIDR or ip and netmask combination.
  */
 
@@ -30742,9 +31306,10 @@ FUNCTION(fun_beep)
     safe_str(tbuf1, buff, bufcx);
 }
 
+#ifdef ZENTY_ANSI
 static const unsigned char AccentCombo2[256] =
 {   
-/*  0  1  2  3  4  5  6  7  8  9  A  B  C  D  E  F   */
+//  0  1  2  3  4  5  6  7  8  9  A  B  C  D  E  F 
 
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  // 0
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  // 1
@@ -30763,19 +31328,17 @@ static const unsigned char AccentCombo2[256] =
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  // D
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  // E
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0   // F
-};  
-
+}; 
+#endif
 
 FUNCTION(fun_accent)
 {
-#ifdef ZENTY_ANSI
-   char *p_ptr, p_oldptr, p_oldptr2, *p_ptr2;
-   int i_inaccent;
-#endif
-
 #ifndef ZENTY_ANSI
    safe_str(fargs[0], buff, bufcx);
 #else
+   char *p_ptr, p_oldptr, p_oldptr2, *p_ptr2;
+   int i_inaccent;
+
    p_ptr2 = fargs[0];
    p_ptr = fargs[1];
    p_oldptr2 = p_oldptr = '\0';
@@ -31669,7 +32232,7 @@ FUNCTION(fun_editansi)
    safe_str((char *)"#-1 ZENTY ANSI REQUIRED FOR THIS FUNCTION.", buff, bufcx);
    return;
 #else
-   if (!fn_range_check_real("EDITANSI", nfargs, 3, MAX_ARGS, buff, bufcx, 1)) 
+   if (!fn_range_check_real("EDITANSI", nfargs, 3, MAX_ARGS, buff, bufcx, 1, (char *)NULL, (char *)NULL)) 
        return;
 
    if ( !*fargs[0] )
@@ -33629,6 +34192,84 @@ FUNCTION(fun_setq_old)
 #endif
 }
 
+FUNCTION(fun_args)
+{
+   int i, i_first, i_low, i_high, i_arglist;
+   static int i_args[1000];
+   char *s_strtok, *s_strtokr, *s_tmp, *s_after, *s_osep;
+
+   if (!fn_range_check("ARGS", nfargs, 1, 2, buff, bufcx))
+      return;
+
+   memset(i_args, 0, sizeof(i_args));
+
+   s_tmp = alloc_lbuf("fun_args");
+   strcpy(s_tmp, fargs[0]);
+   s_strtok = strtok_r(s_tmp, " \t", &s_strtokr);
+   i_arglist = 0;
+   
+   s_osep = (char *)" ";
+   if ( (nfargs > 1) && *fargs[1] ) {
+      s_osep = fargs[1];
+   }
+   while ( s_strtok && *s_strtok ) {
+      if ( (s_after = strchr(s_strtok, '-')) != NULL ) {
+         *s_after = '\0';
+         s_after++;
+         if ( !is_number(s_strtok) || !is_number(s_after) ) {
+            s_strtok = strtok_r(NULL, " \t", &s_strtokr);
+            continue;
+         }
+         i_low = i_high = -1;
+      /* Do ranges */
+         i_low = atoi(s_strtok);
+         i_high = atoi(s_after);
+         if ( i_low < 0 )
+            i_low = 0;
+         if ( i_high < 0 )
+            i_high = 0;
+         if ( i_low > 999 )
+            i_low = 999;
+         if ( i_high > 999 )
+            i_high = 999;
+         if ( i_low > i_high ) {
+            for ( i = i_low; i >= i_high; i-- ) {
+               i_args[i] = 1;
+            }
+         } else {
+            for ( i = i_low; i <= i_high; i++ ) {
+               i_args[i] = 1;
+            }
+         }
+      } else {
+         if ( is_number(s_strtok) ) {
+            i_high = atoi(s_strtok);
+            if ( i_high < 0 )
+               i_high = 0;
+            if ( i_high > 999 )
+               i_high = 999;
+            i_args[i_high] = 1;
+         }
+      }
+      i_arglist = 1;
+      s_strtok = strtok_r(NULL, " \t", &s_strtokr);
+   }
+   free_lbuf(s_tmp);
+
+   i_first = 0;
+   for ( i=0; i < ncargs; i++ ) {
+      if ( cargs[i] ) {
+         if ( !i_arglist || (i_arglist && i_args[i]) ) {
+            if ( i_first ) {
+               safe_str(s_osep, buff, bufcx);
+            }
+            i_first = 1;
+            safe_str(cargs[i], buff, bufcx);
+         }
+      }
+   }
+}
+
 FUNCTION(fun_setq)
 {
     int regnum, i, i_namefnd, i_nfargs;
@@ -34388,6 +35029,25 @@ FUNCTION(fun_chr)
     }
 }
 
+FUNCTION(fun_codepoint)
+{
+    int i;
+    static char s_buff[10];
+
+    if (!is_number(fargs[0])) {
+         safe_str("#-1 ARGUMENT NOT A NUMBER", buff, bufcx);
+    } else {
+         i = atoi(fargs[0]);
+         if ( (i > 255) || (i < 0)) {
+            safe_str("#-1 ARGUMENT OUT OF RANGE", buff, bufcx);
+         } else {
+            sprintf(s_buff, "%c<%c%03d>", '%', BEEP_CHAR, i);
+            safe_str(s_buff, buff, bufcx);
+         }
+    }
+}
+
+
 /* fun_trace: set or unset the trace flag on an object */
 
 FUNCTION(fun_chktrace)
@@ -34430,7 +35090,7 @@ FUNCTION(fun_ljc)
 #endif
   len = atoi(fargs[1]);
 
-  /* seperator */
+  /* separator */
   filllen = 1;
   memset(filler, '\0', sizeof(filler));
   memset(t_buff, '\0', sizeof(t_buff));
@@ -34778,7 +35438,7 @@ FUNCTION(fun_vattrcnt)
        }
        if ( db[target].nvattr != count ) {
           s_mbuff = alloc_mbuf("fun_vattr");
-          sprintf(s_mbuff, "Value missmatch on user-count for dbref#%d.  was %d now %d.", target, db[target].nvattr, count);
+          sprintf(s_mbuff, "Value mismatch on user-count for dbref#%d.  was %d now %d.", target, db[target].nvattr, count);
           db[target].nvattr = count;
           notify_quiet(player, s_mbuff);
           free_mbuf(s_mbuff);
@@ -35304,7 +35964,6 @@ FUNCTION(fun_set)
              default: /* Default is set tree */
                      i_key |= SET_TREE;
                      break;
-                     
           }
        }
        free_lbuf(s_tmp);
@@ -35346,8 +36005,25 @@ FUNCTION(fun_rset)
    if ( (nfargs > 2) && *fargs[2] ) {
        s_tmp = exec(player, cause, caller, EV_STRIP | EV_FCHECK | EV_EVAL,
                      fargs[2], cargs, ncargs, (char **)NULL, 0);
-       if ( *s_tmp ) 
-          i_key = (atoi(s_tmp) ? SET_TREE : 0);
+       if ( *s_tmp ) {
+          switch(atoi(s_tmp)) {
+             case 0: /* Reset to 0 */
+                     i_key = 0;
+                     break;
+             case 1: /* Set tree */
+                     i_key |= SET_TREE;
+                     break;
+             case 2: /* Set strict */
+                     i_key |= SET_STRICT;
+                     break;
+             case 3: /* Set tree and strict */
+                     i_key |= (SET_STRICT | SET_TREE);
+                     break;
+             default: /* Default is set tree */
+                     i_key |= SET_TREE;
+                     break;
+          }
+       }
        free_lbuf(s_tmp);
    }
    s_buf1 = exec(player, cause, caller, EV_STRIP | EV_FCHECK | EV_EVAL,
@@ -36169,7 +36845,7 @@ FUNCTION(fun_wipe)
       switch( mudstate.wipe_state ) {
          case -1: notify(player, "Wipe: no match");
                   break;
-         case -2: notify(player, "Wipe: Can not wipe safe/indestructable objects.");
+         case -2: notify(player, "Wipe: Can not wipe safe/indestructible objects.");
                   break;
          default: s_buff = alloc_lbuf("fun_wipe");
                   sprintf(s_buff, "Wipe: %d attributes wiped.", mudstate.wipe_state);
@@ -37437,6 +38113,7 @@ FUN flist[] =
     {"ANSIPOS", fun_ansipos, 2, 0, CA_PUBLIC, 0},
     {"APOSS", fun_aposs, 1, 0, CA_PUBLIC, 0},
     {"ARRAY", fun_array, 3, FN_VARARGS, CA_PUBLIC, CA_NO_CODE},
+    {"ARGS", fun_args, 1, FN_VARARGS, CA_PUBLIC, CA_NO_CODE},
     {"ART", fun_art, 1, FN_VARARGS, CA_PUBLIC, 0},
     {"ASC", fun_asc, 1, FN_VARARGS, CA_PUBLIC, CA_NO_CODE},
     {"ASIN", fun_asin, 1, FN_VARARGS, CA_PUBLIC, CA_NO_CODE},
@@ -37521,6 +38198,7 @@ FUN flist[] =
     {"CLUSTER_XGET", fun_cluster_xget, 2, 0, CA_PUBLIC, CA_NO_CODE},
     {"CMDS", fun_cmds, 1, FN_VARARGS, CA_PUBLIC, CA_NO_CODE},
     {"CNAME", fun_cname, 1, 0, CA_PUBLIC, 0},
+    {"CODEPOINT", fun_codepoint, 1, 0, CA_IMMORTAL, CA_NO_CODE},
     {"COLORS", fun_colors, 1, FN_VARARGS, CA_PUBLIC, 0},
     {"COLUMNS", fun_columns, 3, FN_VARARGS, CA_PUBLIC, 0},
     {"COMP", fun_comp, 2, FN_VARARGS, CA_PUBLIC, CA_NO_CODE},
@@ -37535,6 +38213,7 @@ FUN flist[] =
     {"COSH", fun_cosh, 1, FN_VARARGS, CA_PUBLIC, CA_NO_CODE},
     {"COUNTSPECIAL", fun_countspecial, 1, FN_VARARGS, CA_PUBLIC, CA_NO_CODE},
     {"CRC32", fun_crc32, 1,  FN_VARARGS, CA_PUBLIC, CA_NO_CODE},
+    {"CRC32OBJ", fun_crc32obj, 2,  FN_VARARGS, CA_PUBLIC, CA_NO_CODE},
     {"CREPLACE", fun_creplace, 0, FN_VARARGS | FN_NO_EVAL, CA_PUBLIC, CA_NO_CODE},
 #ifdef USE_SIDEEFFECT
     {"CREATE", fun_create, 1, FN_VARARGS, CA_PUBLIC, 0},
@@ -37691,6 +38370,7 @@ FUN flist[] =
 #endif
     {"LEXITS", fun_lexits, 1, FN_VARARGS, CA_PUBLIC, CA_NO_CODE},
     {"LFLAGS", fun_lflags, 1, 0, CA_PUBLIC, CA_NO_CODE},
+    {"LIMITS", fun_limits, 1, 0, CA_WIZARD, 0},
 #ifdef USE_SIDEEFFECT
     {"LINK", fun_link, 2, 0, CA_PUBLIC, 0},
 #endif
@@ -37767,6 +38447,7 @@ FUN flist[] =
     {"MASK", fun_mask, 0, FN_VARARGS, CA_PUBLIC, CA_NO_CODE},
     {"MATCH", fun_match, 0, FN_VARARGS, CA_PUBLIC, CA_NO_CODE},
     {"MAX", fun_max, 0, FN_VARARGS, CA_PUBLIC, CA_NO_CODE},
+    {"MEDIT", fun_medit, 3, FN_VARARGS, CA_PUBLIC, 0},
     {"MEMBER", fun_member, 0, FN_VARARGS, CA_PUBLIC, CA_NO_CODE},
     {"MERGE", fun_merge, 3, 0, CA_PUBLIC, CA_NO_CODE},
     {"MID", fun_mid, 3, FN_VARARGS, CA_PUBLIC, 0},
@@ -38014,7 +38695,9 @@ FUN flist[] =
     {"TOOCT", fun_tooct, 1, 0, CA_PUBLIC, CA_NO_CODE},
     {"TOTCMDS", fun_totcmds, 1, 0, CA_PUBLIC, CA_NO_CODE},
     {"TOTEMS", fun_totems, 1, 0, CA_PUBLIC, CA_NO_CODE},
+#ifdef USE_SIDEEFFECT
     {"TOTEMSET", fun_totemset, 2, 0, CA_PUBLIC, CA_NO_CODE},
+#endif
     {"TOTMATCH", fun_totmatch, 0, FN_VARARGS, CA_PUBLIC, CA_NO_CODE},
     {"TOTWILDMATCH", fun_totwildmatch, 0, FN_VARARGS, CA_PUBLIC, CA_NO_CODE},
     {"TOTMEMBER", fun_totmember, 0, FN_VARARGS, CA_PUBLIC, CA_NO_CODE},
@@ -38570,7 +39253,7 @@ do_function(dbref player, dbref cause, int key, char *fname, char *target)
        return;
     }
 
-    /* Make sure attribute is readably by me */
+    /* Make sure attribute is readable by me */
     ap = atr_num(atr);
     if (!ap) {
        notify_quiet(player, "No such attribute.");
@@ -38593,7 +39276,7 @@ do_function(dbref player, dbref cause, int key, char *fname, char *target)
        return;
     }
 
-    /* Privalaged functions require printable characters -- no ansi */
+    /* Privileged functions require printable characters -- no ansi */
     if (i_local) {
        s_buffptr = np;
        while ( *s_buffptr ) {
@@ -38952,7 +39635,7 @@ CF_HAND(cf_func_access)
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
  * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
+ *    must display the following acknowledgment:
  *  This product includes software developed by the University of
  *  California, Berkeley and its contributors.
  * 4. Neither the name of the University nor the names of its contributors

@@ -99,6 +99,7 @@ void FDECL(dump_rusers, (DESC * call_by));
 
 #endif
 
+/* These functions only strip RAW ansi.  Leave this as it is or shit breaks */
 extern char *
 strip_ansi2(const char *raw)
 {
@@ -122,6 +123,7 @@ strip_ansi2(const char *raw)
     RETURN(buf); /* #98 */
 }
 
+/* These functions only strip RAW ansi.  Leave this as it is or shit breaks */
 extern char *
 strip_ansi(const char *raw)
 {
@@ -145,6 +147,7 @@ strip_ansi(const char *raw)
     RETURN(buf); /* #98 */
 }
 
+/* These functions only strip RAW ansi.  Leave this as it is or shit breaks */
 #ifdef ZENTY_ANSI
 extern char *
 strip_safe_accents(const char *raw)
@@ -663,7 +666,7 @@ do_snoop(dbref player, dbref cause, int key, char *name, char *arg2)
 	    }
 	}
 	if (found == 0)
-	    notify(player, "There are no players beeing snooped on.");
+	    notify(player, "There are no players being snooped on.");
 	VOIDRETURN; /* #106 */
     }
     if (*name == '\0') {
@@ -744,7 +747,7 @@ do_snoop(dbref player, dbref cause, int key, char *name, char *arg2)
 	    if (node->sfile && !(d->logged)) {
 		d->logged = 1;
 		fprintf(node->sfile, "Snoop attached: [%s/%s] (%ld) %s", 
-                        inet_ntoa(d->address.sin_addr), d->addr, mudstate.now, ctime(&mudstate.now));
+                        inet_ntoa(d->address.sin_addr), d->longaddr, mudstate.now, ctime(&mudstate.now));
 	    }
 	    node->next = d->snooplist;
 	    d->snooplist = node;
@@ -1732,7 +1735,7 @@ raw_broadcast(va_alist)
 
 /* ---------------------------------------------------------------------------
  * raw_broadcast2: Send message to players who have indicated flags
- * DONT USE THIS ANYMORE, USE THE ABOVE -2/95 thorin
+ * DONT USE THIS ANYMORE, USE THE ABOVE -2/95 Thorin
  */
 
 #ifdef NEED_VSPRINTF_DCL
@@ -1853,7 +1856,7 @@ queue_write(DESC * d, const char *b, int n)
             buf = alloc_lbuf("queue_write.LOG");
 	    sprintf(buf,
 		    "[%d/%s] Output buffer overflow, %d chars discarded by ",
-		    d->descriptor, d->addr, tp->hdr.nchars);
+		    d->descriptor, d->longaddr, tp->hdr.nchars);
 	    log_text(buf);
 	    free_lbuf(buf);
 	    log_name(d->player);
@@ -2344,7 +2347,7 @@ announce_connect(dbref player, DESC * d, int dc)
 
     time_str = ctime(&mudstate.now);
     time_str[strlen(time_str) - 1] = '\0';
-    record_login(player, 1, time_str, d->addr, &totsucc, &totfail, &newfail);
+    record_login(player, 1, time_str, d->longaddr, &totsucc, &totfail, &newfail);
     if ( !(d->flags & DS_SSL) ) {
        atr_add_raw(player, A_LASTIP, inet_ntoa(d->address.sin_addr));
     } else {
@@ -2352,41 +2355,41 @@ announce_connect(dbref player, DESC * d, int dc)
           atr_add_raw(player, A_LASTIP, d->doing);
           d->doing[0] = '\0';
        } else {
-          atr_add_raw(player, A_LASTIP, d->addr);
+          atr_add_raw(player, A_LASTIP, d->longaddr);
        }
     }
     if ( num > 1 ) {
        if (Suspect(player))
 	   broadcast_monitor(player, MF_SITE | MF_STATS | MF_TRIM, "RECONNECT [SUSPECT]",
-			     d->userid, d->addr, totsucc, newfail, totfail, NULL);
+			     d->userid, d->longaddr, totsucc, newfail, totfail, NULL);
        else if (d->host_info & H_SUSPECT)
 	   broadcast_monitor(player, MF_SITE | MF_STATS | MF_TRIM, "RECONNECT [SUSPECT SITE]",
-			     d->userid, d->addr, totsucc, newfail, totfail, NULL);
+			     d->userid, d->longaddr, totsucc, newfail, totfail, NULL);
        else if (d->host_info & H_PASSPROXY)
 	   broadcast_monitor(player, MF_SITE | MF_STATS | MF_TRIM, "RECONNECT [PROXY BYPASS]",
-			     d->userid, d->addr, totsucc, newfail, totfail, NULL);
+			     d->userid, d->longaddr, totsucc, newfail, totfail, NULL);
        else if (dc)
 	   broadcast_monitor(player, MF_SITE | MF_STATS | MF_DCONN, "RECONNECT",
-			     d->userid, d->addr, totsucc, newfail, totfail, NULL);
+			     d->userid, d->longaddr, totsucc, newfail, totfail, NULL);
        else 
 	   broadcast_monitor(player, MF_SITE | MF_STATS, "RECONNECT",
-			     d->userid, d->addr, totsucc, newfail, totfail, NULL);
+			     d->userid, d->longaddr, totsucc, newfail, totfail, NULL);
     } else {
        if (Suspect(player))
 	   broadcast_monitor(player, MF_SITE | MF_STATS | MF_TRIM, "CONNECT [SUSPECT]",
-			     d->userid, d->addr, totsucc, newfail, totfail, NULL);
+			     d->userid, d->longaddr, totsucc, newfail, totfail, NULL);
        else if (d->host_info & H_SUSPECT)
 	   broadcast_monitor(player, MF_SITE | MF_STATS | MF_TRIM, "CONNECT [SUSPECT SITE]",
-			     d->userid, d->addr, totsucc, newfail, totfail, NULL);
+			     d->userid, d->longaddr, totsucc, newfail, totfail, NULL);
        else if (d->host_info & H_PASSPROXY)
 	   broadcast_monitor(player, MF_SITE | MF_STATS | MF_TRIM, "CONNECT [PROXY BYPASS]",
-			     d->userid, d->addr, totsucc, newfail, totfail, NULL);
+			     d->userid, d->longaddr, totsucc, newfail, totfail, NULL);
        else if (dc)
 	   broadcast_monitor(player, MF_SITE | MF_STATS | MF_DCONN, "CONNECT",
-			     d->userid, d->addr, totsucc, newfail, totfail, NULL);
+			     d->userid, d->longaddr, totsucc, newfail, totfail, NULL);
        else 
 	   broadcast_monitor(player, MF_SITE | MF_STATS, "CONNECT",
-			     d->userid, d->addr, totsucc, newfail, totfail, NULL);
+			     d->userid, d->longaddr, totsucc, newfail, totfail, NULL);
     }
     temp = mudstate.curr_enactor;
     mudstate.curr_enactor = player;
@@ -2600,17 +2603,17 @@ announce_disconnect(dbref player, DESC *d, const char *reason)
     } else if (d->host_info & H_SUSPECT) {
         if ( num < 2 )
 	   broadcast_monitor(player, MF_TRIM, "DISCONN [SUSPECT SITE]", 
-                             d->userid, d->addr, 0, 0, 0, (char *)reason);
+                             d->userid, d->longaddr, 0, 0, 0, (char *)reason);
         else
 	   broadcast_monitor(player, MF_TRIM, "PARTIAL DISCONN [SUSPECT SITE]", 
-                             d->userid, d->addr, 0, 0, 0, (char *)reason);
+                             d->userid, d->longaddr, 0, 0, 0, (char *)reason);
     } else if (d->host_info & H_PASSPROXY) {
         if ( num < 2 )
 	   broadcast_monitor(player, MF_TRIM, "DISCONN [PROXY BYPASS]", 
-                             d->userid, d->addr, 0, 0, 0, (char *)reason);
+                             d->userid, d->longaddr, 0, 0, 0, (char *)reason);
         else
 	   broadcast_monitor(player, MF_TRIM, "PARTIAL DISCONN [PROXY BYPASS]", 
-                             d->userid, d->addr, 0, 0, 0, (char *)reason);
+                             d->userid, d->longaddr, 0, 0, 0, (char *)reason);
     } else {
         if ( num < 2 )
 	   broadcast_monitor(player, 0, "DISCONN", 
@@ -2932,7 +2935,7 @@ desc_reload(dbref player)
 }
 
 /* ---------------------------------------------------------------------------
- * fetch_idle, fetch_connect: Return smallest idle time/largest connec time
+ * fetch_idle, fetch_connect: Return smallest idle time/largest connect time
  * for a player (or -1 if not logged in)
  */
 
@@ -3363,7 +3366,7 @@ dump_users(DESC * e, char *match, int key)
 #else
 			Location(d->player), d->descriptor,
 #endif
-			d->addr);
+			d->longaddr);
 
 #ifdef PARIS
 		fp = &buf[16];
@@ -3969,11 +3972,11 @@ failconn(const char *logcode, const char *logtype,
     DPUSH; /* #145 */
 
     STARTLOG(LOG_LOGIN | LOG_SECURITY, logcode, "RJCT")
-	buff = alloc_mbuf("failconn.LOG");
+	buff = alloc_lbuf("failconn.LOG");
     sprintf(buff, "[%d/%s] %s rejected to ",
-	    d->descriptor, d->addr, logtype);
+	    d->descriptor, d->longaddr, logtype);
     log_text(buff);
-    free_mbuf(buff);
+    free_lbuf(buff);
     if (player != NOTHING)
 	log_name(player);
     else
@@ -4055,7 +4058,7 @@ softcode_trigger(DESC *d, const char *msg) {
 
     /* IP number as %3 */
     s_ptr = s_array[3];
-    safe_str(d->addr, s_array[3], &s_ptr);
+    safe_str(d->longaddr, s_array[3], &s_ptr);
 
     /* Port  as %4*/
     s_ptr = s_array[4];
@@ -4283,11 +4286,11 @@ check_connect(DESC * d, const char *msg, int key, int i_attr)
       STARTLOG(LOG_LOGIN | LOG_SECURITY, "CON", "OVERFLOW")
          *(((char *)msg)+LBUF_SIZE-MBUF_SIZE-1) = '\0';
          buff = alloc_lbuf("check_conn.LOG.over");
-         sprintf(buff, "[%d/%s] Attempted overflow -> %.3800s", d->descriptor, d->addr, msg);
+         sprintf(buff, "[%d/%s] Attempted overflow -> %.3800s", d->descriptor, d->longaddr, msg);
          log_text(buff);
          free_lbuf(buff);
       ENDLOG
-      broadcast_monitor(NOTHING, MF_CONN, "ATTEMPTED OVERFLOW", d->userid, d->addr, d->descriptor, 0, 0, NULL);
+      broadcast_monitor(NOTHING, MF_CONN, "ATTEMPTED OVERFLOW", d->userid, d->longaddr, d->descriptor, 0, 0, NULL);
       free_mbuf(command);
       free_mbuf(user);
       free_mbuf(password);
@@ -4302,7 +4305,7 @@ check_connect(DESC * d, const char *msg, int key, int i_attr)
     STARTLOG(LOG_CONNECT, "CMD", "BAD")
        buff = alloc_lbuf("check_conn.LOG.bad");
        sprintf(buff, "[%d/%s] On connect screen -> %.3900s",
-               d->descriptor, d->addr, msg);
+               d->descriptor, d->longaddr, msg);
        log_text(buff);
        free_lbuf(buff);
     ENDLOG
@@ -4335,17 +4338,17 @@ check_connect(DESC * d, const char *msg, int key, int i_attr)
       queue_string(d, mudconf.string_conn);
       queue_string(d, " guest guest' to connect to a guest character.\r\n");
       STARTLOG(LOG_LOGIN | LOG_SECURITY, "CON", "BAD")
-         buff = alloc_mbuf("check_conn.LOG.bad");
-         sprintf(buff, "[%d/%s] Failed connect to '%s'", d->descriptor, d->addr, user);
+         buff = alloc_lbuf("check_conn.LOG.bad");
+         sprintf(buff, "[%d/%s] Failed connect to '%s'", d->descriptor, d->longaddr, user);
          log_text(buff);
-         free_mbuf(buff);
+         free_lbuf(buff);
       ENDLOG
       if (player2 == NOTHING) {
          broadcast_monitor(NOTHING, MF_SITE | MF_BFAIL, "FAIL (BAD GUEST CONNECT)", 
-                           d->userid, d->addr, 0, 0, 0, user);
+                           d->userid, d->longaddr, 0, 0, 0, user);
       } else {
          broadcast_monitor(NOTHING, MF_SITE | MF_BFAIL, "FAIL (BAD GUEST CONNECT)", 
-                           d->userid, d->addr, 0, 0, 0, 
+                           d->userid, d->longaddr, 0, 0, 0, 
                            (char *)unsafe_tprintf("%s  [%s]", user, Name(player2)));
       }
       is_guest = 1; /* Enforce guest check */
@@ -4370,20 +4373,20 @@ check_connect(DESC * d, const char *msg, int key, int i_attr)
       }
       if ( i_sitemax == -1 ) {
          broadcast_monitor(NOTHING, MF_SITE | MF_FAIL | MF_GFAIL, "NO GUEST FAIL", 
-                           d->userid, d->addr, 0, 0, 0, NULL);
+                           d->userid, d->longaddr, 0, 0, 0, NULL);
          fcache_dump(d, FC_GUEST_FAIL, (char *)NULL);
       } else {
          broadcast_monitor(NOTHING, MF_SITE | MF_FAIL | MF_GFAIL, unsafe_tprintf("NO GUEST FAIL[%d max]", i_sitemax), 
-                           d->userid, d->addr, 0, 0, 0, NULL);
+                           d->userid, d->longaddr, 0, 0, 0, NULL);
          fcache_dump(d, FC_GUEST_FAIL, (char *)"SITE_NOGUEST");
       }
  
       STARTLOG(LOG_LOGIN | LOG_SECURITY, "CON", "GUESTFAIL")
-         buff = alloc_mbuf("check_conn.LOG,badguest");
+         buff = alloc_lbuf("check_conn.LOG,badguest");
          sprintf(buff, "[%d/%s] Attempt to connect to guest char from registered site",
-                 d->descriptor, d->addr);
+                 d->descriptor, d->longaddr);
          log_text(buff);
-         free_mbuf(buff);
+         free_lbuf(buff);
       ENDLOG
       if ( --(d->retries_left) <= 0 ) {
          free_mbuf(command);
@@ -4402,11 +4405,11 @@ check_connect(DESC * d, const char *msg, int key, int i_attr)
          queue_string(d, "Maximum number of guests has been reached.\r\n");
       }
       STARTLOG(LOG_LOGIN | LOG_SECURITY, "CON", "BAD")
-         buff = alloc_mbuf("check_conn.LOG.bad");
+         buff = alloc_lbuf("check_conn.LOG.bad");
          sprintf(buff, "[%d/%s] Failed connect to '%s'",
-                 d->descriptor, d->addr, user);
+                 d->descriptor, d->longaddr, user);
          log_text(buff);
-         free_mbuf(buff);
+         free_lbuf(buff);
       ENDLOG
       if ( --(d->retries_left) <= 0 ) {
          free_mbuf(command);
@@ -4516,13 +4519,13 @@ check_connect(DESC * d, const char *msg, int key, int i_attr)
          queue_string(d, "Connections to that player are unable to use the standard connect command.\r\n");
          queue_string(d, "Try account management?\r\n");
          broadcast_monitor(player, MF_SITE | MF_FAIL, "FAIL (CONNECT PERM RESTRICTED)", 
-                           d->userid, d->addr, 0, 0, 0, NULL);
+                           d->userid, d->longaddr, 0, 0, 0, NULL);
          STARTLOG(LOG_LOGIN | LOG_SECURITY, "CON", "RESTRICT")
-            buff = alloc_mbuf("check_conn.LOG.restrict");
+            buff = alloc_lbuf("check_conn.LOG.restrict");
             sprintf(buff, "[%d/%s] (RESTRICTED) Failed connect to '%s'",
-                    d->descriptor, d->addr, user);
+                    d->descriptor, d->longaddr, user);
             log_text(buff);
-            free_mbuf(buff);
+            free_lbuf(buff);
          ENDLOG
          if ( --(d->retries_left) <= 0 ) {
             free_mbuf(command);
@@ -4535,11 +4538,11 @@ check_connect(DESC * d, const char *msg, int key, int i_attr)
       } else if (player == NOPERM) {
          queue_string(d, "Connections to that player are not allowed from your site.\r\n");
          STARTLOG(LOG_LOGIN | LOG_SECURITY, "CON", "BADSITE")
-            buff = alloc_mbuf("check_conn.LOG.bad");
+            buff = alloc_lbuf("check_conn.LOG.bad");
             sprintf(buff, "[%d/%s] Failed connect to '%s'",
-                    d->descriptor, d->addr, user);
+                    d->descriptor, d->longaddr, user);
             log_text(buff);
-            free_mbuf(buff);
+            free_lbuf(buff);
          ENDLOG
          if ( --(d->retries_left) <= 0 ) {
             free_mbuf(command);
@@ -4554,11 +4557,11 @@ check_connect(DESC * d, const char *msg, int key, int i_attr)
          if ((player != NOTHING) && NoPossess(player)) {
             DESC_ITER_CONN(d3) {
                if (d3->player == player) {
-                  if ( strcmp(d3->addr, d->addr) || strcmp(d3->userid, d->userid)) {
+                  if ( strcmp(d3->longaddr, d->longaddr) || strcmp(d3->userid, d->userid)) {
                      postest = 1;
                      break;
                   }
-                  if ( !strcmp(d3->addr, d->addr) ) {
+                  if ( !strcmp(d3->longaddr, d->longaddr) ) {
                      postestcnt++;
                   }
                }
@@ -4570,16 +4573,16 @@ check_connect(DESC * d, const char *msg, int key, int i_attr)
          if ((player == NOTHING) || (Flags3(player) & NOCONNECT) || postest ) {
             if ((player != NOTHING) && (Flags3(player) & NOCONNECT))
                broadcast_monitor(player, MF_SITE | MF_FAIL, "FAIL (NOCONNECT)", 
-                                 d->userid, d->addr, 0, 0, 0, NULL);
+                                 d->userid, d->longaddr, 0, 0, 0, NULL);
             if (postest)
                broadcast_monitor(player, MF_SITE | MF_FAIL, "FAIL (NOPOSSESS)", 
-                                 d->userid, d->addr, 0, 0, 0, NULL);
+                                 d->userid, d->longaddr, 0, 0, 0, NULL);
             if ( !is_guest && (player == NOTHING) && (player2 == NOTHING))
                broadcast_monitor(NOTHING, MF_SITE | MF_BFAIL, "FAIL (BAD CONNECT)", 
-                                 d->userid, d->addr, 0, 0, 0, user);
+                                 d->userid, d->longaddr, 0, 0, 0, user);
             if ( !is_guest && (player == NOTHING) && (player2 != NOTHING))
                broadcast_monitor(NOTHING, MF_SITE | MF_BFAIL, "FAIL (BAD CONNECT)", 
-                                 d->userid, d->addr, 0, 0, 0, 
+                                 d->userid, d->longaddr, 0, 0, 0, 
                                  (char *)unsafe_tprintf("%s  [%s]", user, Name(player2)));
 
             /* Not a player, or wrong password */
@@ -4631,7 +4634,7 @@ check_connect(DESC * d, const char *msg, int key, int i_attr)
                   sarray[3] = alloc_lbuf("noconnect4");
                   sarray[4] = NULL;
                   strcpy(sarray[0], inet_ntoa(d->address.sin_addr));
-                  strcpy(sarray[1], d->addr);
+                  strcpy(sarray[1], d->longaddr);
                   sprintf(sarray[2], "%d", d->descriptor);
                   if ( !Good_chk(player ) )
                      sprintf(sarray[3], "#%d", NOTHING);
@@ -4699,11 +4702,11 @@ check_connect(DESC * d, const char *msg, int key, int i_attr)
                queue_string(d, connect_fail);
             }
             STARTLOG(LOG_LOGIN | LOG_SECURITY, "CON", "BAD")
-               buff = alloc_mbuf("check_conn.LOG.bad");
+               buff = alloc_lbuf("check_conn.LOG.bad");
                sprintf(buff, "[%d/%s] Failed connect to '%s'",
-                       d->descriptor, d->addr, user);
+                       d->descriptor, d->longaddr, user);
                log_text(buff);
-               free_mbuf(buff);
+               free_lbuf(buff);
             ENDLOG
             if ( --(d->retries_left) <= 0 ) {
                free_mbuf(command);
@@ -4717,12 +4720,12 @@ check_connect(DESC * d, const char *msg, int key, int i_attr)
                      Wizard(player) || God(player) || (Login(player) & ok_to_login)) {
             /* Logins are enabled, or wiz or god */
             STARTLOG(LOG_LOGIN, "CON", "LOGIN")
-               buff = alloc_mbuf("check_conn.LOG.login");
+               buff = alloc_lbuf("check_conn.LOG.login");
                sprintf(buff, "[%d/%s] Connected to ",
-                       d->descriptor, d->addr);
+                       d->descriptor, d->longaddr);
                log_text(buff);
                log_name_and_loc(player);
-               free_mbuf(buff);
+               free_lbuf(buff);
             ENDLOG
             d->flags |= DS_CONNECTED;
             d->connected_at = time(0);
@@ -4817,7 +4820,7 @@ check_connect(DESC * d, const char *msg, int key, int i_attr)
          if ( (mudstate.last_pcreate_cnt >= mudconf.max_pcreate_lim) &&
               ((mudstate.last_pcreate_time + mudconf.max_pcreate_time) > mudstate.now) ) {
             broadcast_monitor(NOTHING, (MF_SITE | MF_BFAIL), "FAIL (CREATE CEILING)", d->userid,
-                              d->addr, 0, 0, 0, user);
+                              d->longaddr, 0, 0, 0, user);
             buff = alloc_mbuf("check_conn.LOG.badcrea");
             if ( mudconf.pcreate_paranoia > 0 ) {
                sprintf(buff, "%.100s 255.255.255.255", inet_ntoa(d->address.sin_addr));
@@ -4838,7 +4841,7 @@ check_connect(DESC * d, const char *msg, int key, int i_attr)
                broadcast_monitor(NOTHING, MF_CONN, unsafe_tprintf("PCREATE-SITE AUTO-BLOCKED[%d attempts/%ds time]",
                                  mudstate.last_pcreate_cnt,
                                  (mudstate.now - mudstate.last_pcreate_time)),
-                                 d->userid, d->addr, 0, 0, 0, user);
+                                 d->userid, d->longaddr, 0, 0, 0, user);
                STARTLOG(LOG_NET | LOG_SECURITY, "NET", "AUTOR")
                   log_text(buff);
                ENDLOG
@@ -4916,22 +4919,27 @@ check_connect(DESC * d, const char *msg, int key, int i_attr)
                }
             } 
             broadcast_monitor(NOTHING, MF_SITE | MF_BFAIL, "FAIL (BAD CREATE)", d->userid, 
-                              d->addr, 0, 0, 0, user);
+                              d->longaddr, 0, 0, 0, user);
             queue_string(d, create_fail);
             STARTLOG(LOG_SECURITY | LOG_PCREATES, "CON", "BAD")
-               buff = alloc_mbuf("check_conn.LOG.badcrea");
+               buff = alloc_lbuf("check_conn.LOG.badcrea");
                sprintf(buff, "[%d/%s] Create of '%s' failed",
-                       d->descriptor, d->addr, user);
+                       d->descriptor, d->longaddr, user);
                log_text(buff);
-               free_mbuf(buff);
+               free_lbuf(buff);
             ENDLOG
+            if (!mudconf.pcreate_paranoia_fail) {
+               if (mudconf.max_pcreate_lim != -1) 
+                  if(mudstate.last_pcreate_cnt > 0)
+                     mudstate.last_pcreate_cnt--;
+            }
          } else {
             STARTLOG(LOG_LOGIN | LOG_PCREATES, "CON", "CREA")
-               buff = alloc_mbuf("check_conn.LOG.create");
-               sprintf(buff, "[%d/%s] Created ", d->descriptor, d->addr);
+               buff = alloc_lbuf("check_conn.LOG.create");
+               sprintf(buff, "[%d/%s] Created ", d->descriptor, d->longaddr);
                log_text(buff);
                log_name(player);
-               free_mbuf(buff);
+               free_lbuf(buff);
             ENDLOG
 
             move_object(player, mudconf.start_room);
@@ -4969,7 +4977,7 @@ check_connect(DESC * d, const char *msg, int key, int i_attr)
          strcpy(buff3,user);
          strcat(buff3,"/");
          strcat(buff3,password);
-         broadcast_monitor(NOTHING, MF_AREG, "NOAUTOREG FAIL (NoAutoReg)", d->userid, d->addr, d->descriptor, 0, 0, buff3);
+         broadcast_monitor(NOTHING, MF_AREG, "NOAUTOREG FAIL (NoAutoReg)", d->userid, d->longaddr, d->descriptor, 0, 0, buff3);
          free_lbuf(buff3);
       } else if (d->regtries_left <= 0) {
          buff3 = alloc_lbuf("reg.fail");
@@ -4978,7 +4986,7 @@ check_connect(DESC * d, const char *msg, int key, int i_attr)
          strcpy(buff3,user);
          strcat(buff3,"/");
          strcat(buff3,password);
-         broadcast_monitor(NOTHING, MF_AREG, "NOAUTOREG FAIL LIMIT", d->userid, d->addr, d->descriptor, 0, 0, buff3);
+         broadcast_monitor(NOTHING, MF_AREG, "NOAUTOREG FAIL LIMIT", d->userid, d->longaddr, d->descriptor, 0, 0, buff3);
          free_lbuf(buff3);
       } else {
          switch (reg_internal(user, password, (char *)d, 0, NULL, user, 0)) {
@@ -5075,7 +5083,7 @@ do_command(DESC * d, char *command)
     char *arg, *cmdsave, *time_str, *s_rollback, *s_dtime, *addroutbuf, *addrsav,
          *s_sitetmp, *s_sitebuff;
     int retval, cval, gotone, store_perm, chk_perm, i_rollback, i_jump,
-        maxsitecon, i_retvar, i_valid, aflags;
+        maxsitecon, i_retvar, i_valid, aflags, no_space;
     struct SNOOPLISTNODE *node;
     struct sockaddr_in p_sock;
     struct in_addr p_addr;
@@ -5180,7 +5188,7 @@ do_command(DESC * d, char *command)
              log_text("[HACKING] ");
              log_text(s_rollback);
           ENDLOG
-          /* We're disabling the SSL handler at this point as it's been comprimised */
+          /* We're disabling the SSL handler at this point as it's been compromised */
           STARTLOG(LOG_ALWAYS, "NET", "SSL");
              log_text("SSL handler [sconnect_reip] has been disabled as secret [sconnect_cmd] was guessed");
           ENDLOG
@@ -5403,18 +5411,27 @@ do_command(DESC * d, char *command)
              memset(d->doing, '\0', sizeof(d->doing));
              strncpy(d->doing, arg, 50);
 
-             /* d->addr is a string that shows on the WHO and stored in &LASTSITE */
+             /* d->addr is the legacy DNS string */
              memset(d->addr, '\0', sizeof(d->addr));
              strncpy(d->addr, arg, 50);
+
+             /* d->longaddr is a string that shows on the WHO and stored in &LASTSITE */
+             memset(d->longaddr, '\0', sizeof(d->longaddr));
+             strncpy(d->longaddr, arg, 255);
+
           } else {
              /* We're doing a bit of tricky-dicky here because d->doing is unused on new connections (until connected) */
              /* This will be the IP address stored in &LASTIP */
              memset(d->doing, '\0', sizeof(d->doing));
              strncpy(d->doing, arg, 50);
 
-             /* d->addr is a string that shows on the WHO and stored in &LASTSITE */
+             /* d->addr is the legacy DNS string */
              memset(d->addr, '\0', sizeof(d->addr));
              strncpy(d->addr, s_sitetmp, 50);
+
+             /* d->longaddr is a string that shows on the WHO and stored in &LASTSITE */
+             memset(d->longaddr, '\0', sizeof(d->longaddr));
+             strncpy(d->longaddr, s_sitetmp, 255);
           }
 
           /* Flag the connection SSL as we're successful at this point and log and continue */
@@ -5540,8 +5557,13 @@ do_command(DESC * d, char *command)
                i_jump = mudstate.jumpst;
                mudstate.jumpst = mudstate.rollbackcnt = 0;
                strcpy(mudstate.rollback, command);
+               no_space = mudstate.no_space_compress;
+               if ( *command == '}' ) {
+                  mudstate.no_space_compress = 1;
+               }
 	       process_command(d->player, d->player, 1,
-			       command, (char **) NULL, 0, mudstate.shell_program, mudstate.no_hook);
+			       command, (char **) NULL, 0, mudstate.shell_program, mudstate.no_hook, mudstate.no_space_compress);
+               mudstate.no_space_compress = no_space;
                mudstate.rollbackcnt = i_rollback;
                mudstate.jumpst = i_jump;
                strcpy(mudstate.rollback, s_rollback);
@@ -5703,7 +5725,7 @@ do_command(DESC * d, char *command)
 #ifdef ENABLE_WEBSOCKETS
                ////////   NEW WEBSOCK
                ///// TODO: Improve logic here
-               if ( !stricmp(s_strtok, (char *)"Upgrade: websocket") ) {
+               if ( !stricmp(s_strtok, (char *)"Upgrade: WebSocket") ) {
                    i_socksnarf++;
                }
                if ( !stricmp(s_strtok, (char *)"Connection: Upgrade") ) {
@@ -5768,7 +5790,7 @@ do_command(DESC * d, char *command)
             if (i_socksnarf >= 5) {
                 free_lbuf(s_user); // Was allocated but will not be used
                 STARTLOG(LOG_ALWAYS, "NET", "WS");
-                log_text("Received Websocket opening handshake.");
+                log_text("Received WebSocket opening handshake.");
                 ENDLOG;
                 complete_handshake(d, s_sockkey);
             } else

@@ -71,7 +71,11 @@ do_list_file(dbref player, dbref cause, int extra, char *arg)
 {
     int flagvalue;
 
-    flagvalue = search_nametab(player, list_files, arg);
+    if ( arg && *arg ) {
+       flagvalue = search_nametab(player, list_files, arg);
+    } else {
+       flagvalue = -1;
+    }
     if (flagvalue < 0) {
 	display_nametab(player, list_files,
 			(char *) "Unknown file.  Use one of:", 1);
@@ -434,7 +438,7 @@ fcache_dump(DESC * d, int num, char *s_site)
              sarray[3] = alloc_lbuf("fcache_dump2");
              sarray[4] = NULL;
              strcpy(sarray[0], inet_ntoa(d->address.sin_addr));
-             strcpy(sarray[1], d->addr);
+             strcpy(sarray[1], d->longaddr);
              sprintf(sarray[2], "%d", d->descriptor);
              if ( d->player <= 0 )
                 sprintf(sarray[3], "#%d", NOTHING);

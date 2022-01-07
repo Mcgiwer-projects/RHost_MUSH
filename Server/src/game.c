@@ -69,6 +69,9 @@ extern dbref FDECL(match_thing_quiet, (dbref, char *));
 extern void FDECL(init_logfile, ());
 extern void FDECL(close_logfile, ());
 extern void FDECL(totem_write_to_disk, ());
+extern unsigned int FDECL(CRC32_ProcessBuffer, (unsigned int, const void *, unsigned int));
+extern double FDECL(safe_atof, (char *));
+extern char FDECL(*ColorName, (dbref, int));
 
 void FDECL(fork_and_dump, (int, char *));
 void NDECL(dump_database);
@@ -314,7 +317,7 @@ atr_match1(dbref thing, dbref parent, dbref player, char type,
 	if (!*s)
 	    continue;
 	*s++ = 0;
-        /* Allow attributes set NO_PARSE to pass in what player types verbatum */
+        /* Allow attributes set NO_PARSE to pass in what player types verbatim */
         if ( PCRE_EXEC && ((aflags & AF_REGEXP) || (ap->flags & AF_REGEXP)) ) {
            s3 = buff + 1;
            memset(buff2, '\0', sizeof(buff2));
@@ -473,6 +476,139 @@ atr_match1(dbref thing, dbref parent, dbref player, char type,
     RETURN(0); /* #70 */
 }
 
+int
+verify_checksum(dbref thing) 
+{
+   ATTR *ap, *ap2;
+   unsigned int ulCRC32;
+   char *s_str, *s_buff, *as, *s_chksum, *s_tok;
+   int anum, anumsave, anumignore1, anumignore2, aflags, i_len;
+   time_t t_tme;
+   dbref aowner;
+
+
+   /* If CPU time hit or time exceeded just bypass checksum checks */
+   t_tme = time(NULL);
+   if ( mudstate.chkcpu_toggle || ((mudstate.now + 5) <= t_tme )) {
+      return 1;
+   }
+
+   /* CRC attribute doesn't exist in hash, ignore entirely */
+   ap2 = atr_str_mtch("__CRC32");
+   if ( !ap2 ) {
+      return 1;
+   }
+   anumsave = ap2->number;
+
+   /* Object has no CRC attribute, ignore entirely */
+   s_str = atr_get(thing, anumsave, &aowner, &aflags);
+   if ( !s_str ) {
+      return 1;
+   }
+
+   /* Object's CRC attribute is empty, ignore entirely */
+   if ( !*s_str ) {
+      free_lbuf(s_str);
+      return 1;
+   }
+
+   s_chksum = strtok_r(s_str, " ", &s_tok);
+   if ( s_chksum ) {
+      s_chksum = strtok_r(NULL, " ", &s_tok);
+   }
+
+   /* Object's CRC is corrupt, ignore entirely */
+   if ( !s_chksum || !*s_chksum ) {
+      free_lbuf(s_str);
+      return 1;
+   }
+
+   ulCRC32 = 0;
+   s_buff = alloc_lbuf("verify_checksum");
+
+   anumignore1 = anumignore2 = -1;
+   ap2 = atr_str_mtch("__ATTRPIPE");
+   if ( ap2 ) {
+      anumignore1 = ap2->number;
+   }
+
+   ap2 = atr_str_mtch("_IDLESTAMP");
+   if ( ap2 ) {
+      anumignore2 = ap2->number;
+   }
+
+   for (anum = atr_head(thing, &as); anum; anum = atr_next(&as)) {
+      ap = atr_num_mtch(anum);
+      if ( !ap ) {
+         continue;
+      }
+
+      if ( (ap->flags & AF_INTERNAL) ||
+           (ap->number == anumsave) || 
+           (ap->number == anumignore1) ||
+           (ap->number == anumignore2) ||
+           (ap->number == A_CHARGES) ||
+           (ap->number == A_MONEY) ||
+           (ap->number == A_LAST) ||
+           (ap->number == A_QUEUEMAX) ||
+           (ap->number == A_RQUOTA) ||
+           (ap->number == A_NAME) ||
+           (ap->number == A_SEMAPHORE) ||
+           (ap->number == A_QUOTA) ||
+           (ap->number == A_PRIVS) ||
+           (ap->number == A_LOGINDATA) ||
+           (ap->number == A_LASTSITE) ||
+           (ap->number == A_LAMBDA) ||
+           (ap->number == A_BCCMAIL) ||
+           (ap->number == A_MPSET) ||
+           (ap->number == A_MPASS) || 
+           (ap->number == A_LASTPAGE) ||
+           (ap->number == A_RETPAGE) ||
+           (ap->number == A_MCURR) ||
+           (ap->number == A_MQUOTA) ||
+           (ap->number == A_LQUOTA) ||
+           (ap->number == A_TQUOTA) ||
+           (ap->number == A_MTIME) || 
+           (ap->number == A_MSAVEMAX) ||
+           (ap->number == A_MSAVECUR) ||
+           (ap->number == A_IDENT) ||
+           (ap->number == A_TOTCMDS) ||
+           (ap->number == A_LSTCMDS) ||
+           (ap->number == A_MODIFY_TIME) ||
+           (ap->number == A_TOTCHARIN) ||
+           (ap->number == A_TOTCHAROUT) ||
+           (ap->number == A_LASTCREATE) ||
+           (ap->number == A_SAVESENDMAIL) ||
+           (ap->number == A_PROGBUFFER) ||
+           (ap->number == A_PROGPROMPT) || 
+           (ap->number == A_PROGPROMPTBUF) ||
+           (ap->number == A_TEMPBUFFER) ||
+           (ap->number == A_DESTVATTRMAX) ||
+           (ap->number == A_LASTIP) || 
+           (ap->number == A_OBJECTTAG) || 
+           (ap->number == A_CREATED_TIME) ||
+           (ap->number == A_MODIFY_TIME) ||
+           ((ap->number >= 252) && (ap->number <= 255)) ) {
+         continue;
+      }
+      (void) atr_get_str(s_buff, thing, ap->number, &aowner, &aflags);
+      i_len = strlen(s_buff);
+      ulCRC32 = CRC32_ProcessBuffer(ulCRC32, s_buff, i_len);
+   }
+
+   /* Stored checksum matches calculated checksum */
+   if ( (unsigned int)safe_atof(s_chksum) == ulCRC32 ) {
+      free_lbuf(s_str);
+      free_lbuf(s_buff);
+      return 1;
+   }
+
+   /* Fell through with a bad checksum */
+   free_lbuf(s_str);
+   free_lbuf(s_buff);
+   return 0;
+}
+
 int 
 atr_match(dbref thing, dbref player, char type, char *str, int check_parents, int dpcheck)
 {
@@ -481,6 +617,11 @@ atr_match(dbref thing, dbref player, char type, char *str, int check_parents, in
     dbref parent;
 
     DPUSH; /* #71 */
+
+    /* Abort if enforced CRC */
+    if ( mudconf.enforce_checksums && !verify_checksum(thing) ) {
+       RETURN(0); /* #71 */
+    }
 
     /* If COMMANDS is defined, check if exists, if not, don't even bother */
 #ifdef ENABLE_COMMAND_FLAG
@@ -615,7 +756,7 @@ notify_check(dbref target, dbref sender, const char *msg, int port, int key, int
     char *mp2, *msg_utf, *mp_utf, *pvap[4];
 #endif
     char *msg_ns, *mp, *msg_ns2, *tbuff, *tp, *buff, *s_tstr, *s_tbuff, *vap[4];
-    char *args[10], *s_logroom, *cpulbuf, *s_aptext, *s_aptextptr, *s_strtokr, *s_pipeattr, *s_pipeattr2, *s_pipebuff, *s_pipebuffptr;
+    char *args[10], *s_logroom, *cpulbuf, *s_aptext, *s_aptextptr, *s_strtokr, *s_pipeattr, *s_pipeattr2, *s_pipebuff, *s_pipebuffptr, *s_tb1, *s_tb2;
     dbref aowner, targetloc, recip, obj, i_apowner, passtarget;
     int i, nargs, aflags, has_neighbors, pass_listen, noansi=0, i_pipetype, i_brokenotify = 0, i_chkcpu;
     int check_listens, pass_uselock, is_audible, i_apflags, i_aptextvalidate = 0, i_targetlist = 0, targetlist[LBUF_SIZE];
@@ -799,8 +940,28 @@ notify_check(dbref target, dbref sender, const char *msg, int port, int key, int
 	              ( !(Wizard(mudstate.posesay_dbref) || HasPriv(mudstate.posesay_dbref, target, POWER_WIZ_SPOOF, POWER5, NOTHING)) || 
                         Immortal(target) || Spoof(mudstate.posesay_dbref) || Spoof(Owner(mudstate.posesay_dbref)) ) ) {
                     sprintf(vap[3], "#%d", mudstate.posesay_dbref);
+                   
+                    /* Replace @N/@n and @K/@k with name and colorname */
+                    s_tb1 = replace_string("@N", Name(mudstate.posesay_dbref), s_pipeattr, 0);
+                    s_tb2 = replace_string("@n", Name(mudstate.posesay_dbref), s_tb1, 0);
+                    free_lbuf(s_pipeattr);
+                    free_lbuf(s_tb1);
+                    s_tb1 = replace_string("@K", ColorName(mudstate.posesay_dbref, 1), s_tb2, 0);
+                    s_pipeattr = replace_string("@k", ColorName(mudstate.posesay_dbref, 1), s_tb1, 0);
+                    free_lbuf(s_tb1);
+                    free_lbuf(s_tb2);
                  } else {
                     sprintf(vap[3], "#%d", -1);
+
+                    /* Replace @N/@n and @K/@k with invalid name (since it's undefined here) */
+                    s_tb1 = replace_string("@N", (char *)"#-1", s_pipeattr, 0);
+                    s_tb2 = replace_string("@n", (char *)"#-1", s_tb1, 0);
+                    free_lbuf(s_pipeattr);
+                    free_lbuf(s_tb1);
+                    s_tb1 = replace_string("@K", (char *)"#-1", s_tb2, 0);
+                    s_pipeattr = replace_string("@k", (char *)"#-1", s_tb1, 0);
+                    free_lbuf(s_tb1);
+                    free_lbuf(s_tb2);
                  }
                  ttm2 = localtime(&mudstate.now);
                  ttm2->tm_year += 1900;
@@ -835,7 +996,14 @@ notify_check(dbref target, dbref sender, const char *msg, int port, int key, int
                     pvap[1] = vap[1] = alloc_lbuf("vap1");
                     pvap[2] = vap[2] = alloc_lbuf("vap2");
                     parse_ansi((char *) s_pipebuffptr, vap[0], &pvap[0], vap[1], &pvap[1], vap[2], &pvap[2]);
-                    raw_notify(target, vap[0], port, 1);
+                    
+                    if ( UTF8(target) ) {
+                       raw_notify(target, vap[2], port, 1);
+                    } else if ( Accents(target) ) {
+                       raw_notify(target, vap[1], port, 1);
+                    } else {
+                       raw_notify(target, vap[0], port, 1);
+                    }
                     free_lbuf(vap[0]);
                     free_lbuf(vap[1]);
                     free_lbuf(vap[2]);
@@ -876,8 +1044,28 @@ notify_check(dbref target, dbref sender, const char *msg, int port, int key, int
 	              ( !(Wizard(mudstate.posesay_dbref) || HasPriv(mudstate.posesay_dbref, target, POWER_WIZ_SPOOF, POWER5, NOTHING)) || 
                         Immortal(target) || Spoof(mudstate.posesay_dbref) || Spoof(Owner(mudstate.posesay_dbref)) ) ) {
                     sprintf(vap[3], "#%d", mudstate.posesay_dbref);
+
+                    /* Replace @N/@n and @K/@k with name and colorname */
+                    s_tb1 = replace_string("@N", Name(mudstate.posesay_dbref), s_pipeattr, 0);
+                    s_tb2 = replace_string("@n", Name(mudstate.posesay_dbref), s_tb1, 0);
+                    free_lbuf(s_pipeattr);
+                    free_lbuf(s_tb1);
+                    s_tb1 = replace_string("@K", ColorName(mudstate.posesay_dbref, 1), s_tb2, 0);
+                    s_pipeattr = replace_string("@k", ColorName(mudstate.posesay_dbref, 1), s_tb1, 0);
+                    free_lbuf(s_tb1);
+                    free_lbuf(s_tb2);
                  } else {
                     sprintf(vap[3], "#%d", -1);
+
+                    /* Replace @N/@n and @K/@k with invalid name (since it's undefined here) */
+                    s_tb1 = replace_string("@N", (char *)"#-1", s_pipeattr, 0);
+                    s_tb2 = replace_string("@n", (char *)"#-1", s_tb1, 0);
+                    free_lbuf(s_pipeattr);
+                    free_lbuf(s_tb1);
+                    s_tb1 = replace_string("@K", (char *)"#-1", s_tb2, 0);
+                    s_pipeattr = replace_string("@k", (char *)"#-1", s_tb1, 0);
+                    free_lbuf(s_tb1);
+                    free_lbuf(s_tb2);
                  }
                  ttm2 = localtime(&mudstate.now);
                  ttm2->tm_year += 1900;
@@ -912,7 +1100,14 @@ notify_check(dbref target, dbref sender, const char *msg, int port, int key, int
                     pvap[1] = vap[1] = alloc_lbuf("vap1");
                     pvap[2] = vap[2] = alloc_lbuf("vap2");
                     parse_ansi((char *) s_pipebuffptr, vap[0], &pvap[0], vap[1], &pvap[1], vap[2], &pvap[2]);
-                    raw_notify(target, vap[0], port, 1);
+
+                    if ( UTF8(target) ) {
+                       raw_notify(target, vap[2], port, 1);
+                    } else if ( Accents(target) ) {
+                       raw_notify(target, vap[1], port, 1);
+                    } else {
+                       raw_notify(target, vap[0], port, 1);
+                    }
                     free_lbuf(vap[0]);
                     free_lbuf(vap[1]);
                     free_lbuf(vap[2]);
@@ -2293,7 +2488,7 @@ main(int argc, char *argv[])
 #ifdef HAS_OPENSSL
     OpenSSL_add_all_digests();
 #endif
-    /* Clean the conf to avoid naughtyness */
+    /* Clean the conf to avoid naughtiness */
     unlink("rhost_vattr.conf");
 
     if ( TOTEM_SLOTS > LBUF_TOTEM ) {

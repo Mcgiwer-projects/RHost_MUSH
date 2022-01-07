@@ -284,6 +284,7 @@ max_sitecons              50
 max_pcreate_lim           -1
 max_pcreate_time          60
 pcreate_paranoia          0
+pcreate_paranoia_fail     1
 spam_limit                60
 spam_msg                  Spam: Spam security initiated. Command aborted.
 spam_objmsg               Spam: Spam security initiated. Your object's command aborted.
@@ -349,8 +350,10 @@ iter_loop_max             100000
 mtimer                    10
 wizcommand_quota_max      100
 protect_addenh            0
+pagelock_notify           1
 posesay_funct             0
 global_error_cmd          0
+enforce_checksums         0
 
 # money and costs
 
@@ -433,6 +436,7 @@ idle_wiz_dark  0
 idle_stamp     0
 idle_stamp_max 10
 null_is_idle   0
+idle_cmdcount  -1
 
 # guests
 
@@ -559,6 +563,7 @@ switch_search          0
 penn_setq              0
 parent_follow          1
 elements_compat        0
+raw_formatting         1
 
 # ObjIDs
 objid_localtime 0

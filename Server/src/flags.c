@@ -816,6 +816,7 @@ POWENT pow_table[] =
   {"MONITORAPI", POWER_MONITORAPI, '8', POWER5, 0, POWER_LEVEL_NA, pw_imm},
   {"WIZ_IDLE", POWER_WIZ_IDLE, '@', POWER5, 0, POWER_LEVEL_NA, pw_imm},
   {"WIZ_SPOOF", POWER_WIZ_SPOOF, '~', POWER5, 0, POWER_LEVEL_COUNC, pw_wiz},
+  {"USE_FREELIST", POWER_USE_FREELIST, 'u', POWER5, 0, POWER_LEVEL_NA, pw_wiz},
   {NULL, 0, 0, 0, 0, 0, NULL}
 };
 
@@ -1015,13 +1016,28 @@ NDECL(init_totemtab)
 {
    TOTEMENT *fp;
    char *nbuf, *np, *bp;
-   int i_rettype, i_cnt;
+   int i_rettype, i_cnt, i_tab;
 
    hashinit(&mudstate.totem_htab, 521);
 
    /* load table */
    nbuf = alloc_sbuf("init_totemtab");
+   i_tab=0;
    for (fp = totem_table; (char *)(fp->flagname) && (*fp->flagname != '\0'); fp++) {
+
+      /* If the flag slot is already in use, skip it */
+      i_tab++;
+      if ( (mudstate.totem_slots[fp->flagpos] & fp->flagvalue) == fp->flagvalue ) {
+        STARTLOG(LOG_ALWAYS, "TTM", "ERROR")
+           sprintf(nbuf, "Duplicate table entry %d: ", i_tab);
+           log_text(nbuf);
+           log_text(fp->flagname);
+           sprintf(nbuf, " [%d] 0x%08x", fp->flagpos, fp->flagvalue);
+           log_text(nbuf);
+        ENDLOG
+        continue;
+      }
+
       memset(nbuf, '\0', SBUF_SIZE);
       for (np = nbuf, i_cnt = 0, bp = (char *) fp->flagname; *bp; np++, bp++) {
          *np = ToLower((int)*bp);
@@ -1033,6 +1049,10 @@ NDECL(init_totemtab)
       /* We need to XMALLOC this value for future potential rename/delete */
       fp->flagname = (char *) strsavetotem(fp->flagname);
       hashadd2(nbuf, (int *) fp, &mudstate.totem_htab, 1);
+
+      /* Update mudstate with slot information for in use */
+      mudstate.totem_slots[fp->flagpos] |= fp->flagvalue;
+      
    }
    free_sbuf(nbuf);
 
@@ -2376,7 +2396,7 @@ decode_flags(dbref player, dbref target, FLAG flagword, FLAG flag2word,
                  !Controls(player, target) ) {
                continue;
             }
-            /* If DARK to be tinymush compatible, don't show connect flag */
+            /* If DARK to be TinyMUSH compatible, don't show connect flag */
             if ( (!(mudconf.who_unfindable) && !(mudconf.player_dark) && mudconf.allow_whodark) &&
                  !Admin(player) && Wizard(target) && Dark(target) && (player != target) && 
                  ((fp->flagflag & FLAG2) && (fp->flagvalue == CONNECTED)) )
@@ -2485,7 +2505,7 @@ decode_flags_func(dbref player, dbref target, FLAG flagword, FLAG flag2word,
                continue;
             }
 
-            /* If DARK to be tinymush compatible, don't show connect flag */
+            /* If DARK to be TinyMUSH compatible, don't show connect flag */
             if ( (!(mudconf.who_unfindable) && !(mudconf.player_dark) && mudconf.allow_whodark) &&
                  !Admin(player) && Wizard(target) && Dark(target) && (player != target) && 
                  ((fp->flagflag & FLAG2) && (fp->flagvalue == CONNECTED)) )
@@ -2643,7 +2663,7 @@ totem_bitstostring(dbref player, dbref it, int perms)
       if ( i_first ) {
          safe_chr(' ', s_showbits, &s_ptr);
       }
-      safe_str("IGNORE_ARCHITECH", s_showbits, &s_ptr);
+      safe_str("IGNORE_ARCHITECT", s_showbits, &s_ptr);
       i_first = 1;
    }
    if (perms & CA_IGNORE_COUNC) {
@@ -2791,7 +2811,7 @@ has_flag(dbref player, dbref it, char *flagname)
              !Controls(player, it) ) {
            return 0;
         }
-        /* If DARK to be tinymush compatible, don't show connect flag */
+        /* If DARK to be TinyMUSH compatible, don't show connect flag */
         if ( (!(mudconf.who_unfindable) && !(mudconf.player_dark) && mudconf.allow_whodark) &&
              !Admin(player) && Wizard(it) && Dark(it) && (player != it) && 
              ((fp->flagflag & FLAG2) && (fp->flagvalue == CONNECTED)) )
@@ -2904,7 +2924,7 @@ flag_description(dbref player, dbref target, int test, int *vp, int i_type)
                  !Controls(player, target) ) {
                continue;
             }
-            /* If DARK to be tinymush compatible, don't show connect flag */
+            /* If DARK to be TinyMUSH compatible, don't show connect flag */
             if ( (!(mudconf.who_unfindable) && !(mudconf.player_dark) && mudconf.allow_whodark) &&
                  !Admin(player) && Wizard(target) && Dark(target) && (player != target) && 
                  ((fp->flagflag & FLAG2) && (fp->flagvalue == CONNECTED)) )
@@ -5708,14 +5728,14 @@ totem_handle_error(int i_error, dbref player, char *s_type, char *s_inbuff)
       case -6: /* Totem bitwise value in use */
          safe_str((char *)"Totem bitwise mask specified already exists", s_inbuff, &s_buffptr);
          break;
-      case -7: /* Totem is unmodifyable */
+      case -7: /* Totem is unmodifiable */
          safe_str((char *)"Totem can not be modified", s_inbuff, &s_buffptr);
          break;
       case -8: /* Totem was not found */
          safe_str((char *)"Totem was not found", s_inbuff, &s_buffptr);
          break;
       case -9: /* Too many aliases */
-         safe_str((char *)"Limit reached for alises on Totem specified (10 Max)", s_inbuff, &s_buffptr);
+         safe_str((char *)"Limit reached for aliases on Totem specified (10 Max)", s_inbuff, &s_buffptr);
          break;
       case -10: /* Invalid letter */
          safe_str((char *)"Invalid totem letter specified.", s_inbuff, &s_buffptr);
@@ -5772,7 +5792,7 @@ int
 totem_player_list(char *buff, int i_type, dbref target, dbref player)
 {
   char *s_hashstr, *s_buffp, *t_ptr;
-/* Enable for permanet of totems
+/* Enable for permanent of totems
  * char c_ch;
  */
   int i_first, totems[TOTEM_SLOTS];
@@ -5821,11 +5841,11 @@ totem_player_list(char *buff, int i_type, dbref target, dbref player)
            case 2: /* Third flag position for letters */
               sprintf(s_hashstr, "%s({%c})", storedtag->flagname, storedtag->flaglett);
               break;
-           default: /* If it does't exist, drop in first tier */
+           default: /* If it doesn't exist, drop in first tier */
               sprintf(s_hashstr, "%s(%c)", storedtag->flagname, storedtag->flaglett);
               break;
         }
-/* This shows the permanance of the totems */
+/* This shows the permanence of the totems */
 //      switch (storedtag->permanent) {
 //         case 2: /* Permanent */
 //            c_ch = 'P';
@@ -6241,7 +6261,7 @@ totem_info(char *totem, char *s_buff)
   if ( hashp->permanent == 2 ) {
      safe_str((char *)"Totem Type: Hard Code (Permanent/locked) [2]\r\nApplied To: ", s_buff, &s_buffptr);  
   } else if ( hashp->permanent == 1 ) {
-     safe_str((char *)"Totem Type: Config Parmeter (Static) [1]\r\nApplied To: ", s_buff, &s_buffptr);  
+     safe_str((char *)"Totem Type: Config Parameter (Static) [1]\r\nApplied To: ", s_buff, &s_buffptr);  
   } else {
      safe_str((char *)"Totem Type: @totem in-line (temporary) [0]\r\nApplied To: ", s_buff, &s_buffptr);  
   }
@@ -6548,7 +6568,7 @@ totem_add(char *totem, int totem_value, int totem_slot, int totem_perm)
     return -5;
   }
 
-  /* If the flag slot is already inuse, abort */
+  /* If the flag slot is already in use, abort */
   if ( (mudstate.totem_slots[totem_slot] & totem_value) == totem_value ) {
     free_lbuf(lcname);
     return -6;
@@ -7084,7 +7104,7 @@ do_totem(dbref player, dbref cause, int key, char *flag1, char *flag2)
          free_lbuf(s_buff);
          break;
       case TOTEM_CLEAN: /* Totem clean -- clear old bits from target */
-         notify(player, "Sorry, this option is not yet implimented.");
+         notify(player, "Sorry, this option is not yet implemented.");
          break;
       case TOTEM_DISPLAY: /* Totem display -- display all 32 flags for specified slot.  Format: @totem/display slotnumber */
          s_buff = alloc_lbuf("totem_display");

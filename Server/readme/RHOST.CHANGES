@@ -1,3 +1,10 @@
+                         RhostMUSH 4.2 Update File
+SPEECH_PREFIX/SPEECH_SUFFIX didn't handle unicode properly.
+				- Thanks Pres
+UTF8 -> ASCII fallback for selecct characters.
+        - Thanks WStarter for the idea, and Pres for the POC
+
+
                          RhostMUSH 4.0 Update File
 MUX passwords didn't work properly because of a memcmp() bug.
 				- Thanks Locke
@@ -173,6 +180,8 @@ All locatization with CLEAR didn't wipe and reset register names.
 				- Thanks MuSoapBox (Auspice, Sparks, Seamus, faraday, Thenomain, and others)
 ] for @hook/ignore and @hook/permit was broken.
 				- Thanks Ixokai
+Ansi splitter had a hierarchy issue with ansi.
+				- Thanks MadamButterfly
 
 
 

@@ -1256,7 +1256,10 @@ int pass_entropy(char *password)
 int ok_password(const char *password, dbref player, int key)
 {
   const char *scan;
-  int num_upper, num_lower, num_special, i_sha512;
+  int num_upper, num_lower, num_special;
+#ifndef STANDALONE
+  int i_sha512;
+#endif
 
   if (*password == '\0')
     return 0;
@@ -1270,10 +1273,12 @@ int ok_password(const char *password, dbref player, int key)
     return 0;
   }
 
+#ifndef STANDALONE
 #ifdef CRYPT_GLIB2
   i_sha512 = 1;
 #else
   i_sha512 = 0;
+#endif
 #endif
 
   num_upper = num_lower = num_special = 0;
@@ -1496,7 +1501,7 @@ void do_switch (dbref player, dbref cause, int key, char *expr,
                      break;
                   cp = parse_to(&s_buffptr, ';', 0);
                   if (cp && *cp) {
-                     process_command(player, cause, 0, cp, cargs, ncargs, 0, mudstate.no_hook);
+                     process_command(player, cause, 0, cp, cargs, ncargs, 0, mudstate.no_hook, mudstate.no_space_compress);
                   }
                }
                mudstate.chkcpu_inline = i_chkinline;
@@ -1555,7 +1560,7 @@ void do_switch (dbref player, dbref cause, int key, char *expr,
                      break;
                   cp = parse_to(&s_buffptr, ';', 0);
                   if (cp && *cp) {
-                     process_command(player, cause, 0, cp, cargs, ncargs, 0, mudstate.no_hook);
+                     process_command(player, cause, 0, cp, cargs, ncargs, 0, mudstate.no_hook, mudstate.no_space_compress);
                   }
                }
                mudstate.chkcpu_inline = i_chkinline;
@@ -1626,7 +1631,7 @@ void do_switch (dbref player, dbref cause, int key, char *expr,
                   break;
                cp = parse_to(&s_buffptr, ';', 0);
                if (cp && *cp) {
-                  process_command(player, cause, 0, cp, cargs, ncargs, 0, mudstate.no_hook);
+                  process_command(player, cause, 0, cp, cargs, ncargs, 0, mudstate.no_hook, mudstate.no_space_compress);
                }
             }
             mudstate.chkcpu_inline = i_chkinline;
@@ -1686,7 +1691,7 @@ void do_switch (dbref player, dbref cause, int key, char *expr,
                   break;
                cp = parse_to(&s_buffptr, ';', 0);
                if (cp && *cp) {
-                  process_command(player, cause, 0, cp, cargs, ncargs, 0, mudstate.no_hook);
+                  process_command(player, cause, 0, cp, cargs, ncargs, 0, mudstate.no_hook, mudstate.no_space_compress);
                }
             }
             mudstate.chkcpu_inline = i_chkinline;
@@ -1940,7 +1945,11 @@ int	anum;
 
 		/* <obj>/<lock> syntax, use the named lock */
 
-		anum = search_nametab(player, lock_sw, str);
+                if ( str && *str ) {
+		   anum = search_nametab(player, lock_sw, str);
+                } else {
+                   anum = -1;
+                }
 		if (anum == -1) {
 			free_lbuf(tbuf);
 			safe_str("#-1 LOCK NOT FOUND", errmsg, errmsgcx);
@@ -2881,7 +2890,7 @@ dbref	aowner, thing_bak;
 int	aflags, tog_val,
         doit = 0;
 
-  /* no if nonplayer trys to get key */
+  /* no if nonplayer tries to get key */
 
   if ( !Good_obj(thing) || !Good_obj(player) )
     return 0;

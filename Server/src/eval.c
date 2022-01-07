@@ -1,4 +1,4 @@
-/* eval.c - command evaulation and cracking */
+/* eval.c - command evaluation and cracking */
 
 #ifdef SOLARIS
 /* borked declarations in Solaris header files */
@@ -152,17 +152,19 @@ parse_to_cleanup(int eval, int first, char *cstr,
 		 char *rstr, char *zstr)
 {
     DPUSH; /* #59 */
-    if ((mudconf.space_compress || (eval & EV_STRIP_TS)) &&
+    if (( (mudconf.space_compress && !mudstate.no_space_compress) || (eval & EV_STRIP_TS)) &&
 	!first && (cstr[-1] == ' '))
 	zstr--;
     if ((eval & EV_STRIP_AROUND) && (*rstr == '{') && (zstr[-1] == '}')) {
 	rstr++;
-	if (mudconf.space_compress || (eval & EV_STRIP_LS))
+	if ( !mudstate.no_space_compress && 
+             ((mudconf.space_compress && !mudstate.no_space_compress) || (eval & EV_STRIP_LS)) ) 
 	    while (*rstr && isspace((int)*rstr))
 		rstr++;
 	rstr[-1] = '\0';
 	zstr--;
-	if (mudconf.space_compress || (eval & EV_STRIP_TS))
+	if ( !mudstate.no_space_compress &&
+             ((mudconf.space_compress && !mudstate.no_space_compress) || (eval & EV_STRIP_TS)) )
 	    while (zstr[-1] && isspace((int)(zstr[-1])))
 		zstr--;
 	*zstr = '\0';
@@ -201,7 +203,8 @@ parse_to(char **dstr, char delim, int eval)
     sp = 0;
     first = 1;
     rstr = *dstr;
-    if (mudconf.space_compress | (eval & EV_STRIP_LS)) {
+    if ( !mudstate.no_space_compress && 
+         ((mudconf.space_compress && !mudstate.no_space_compress) || (eval & EV_STRIP_LS)) ) {
 	while (*rstr && isspace((int)*rstr))
 	    rstr++;
 	*dstr = rstr;
@@ -290,7 +293,7 @@ parse_to(char **dstr, char delim, int eval)
 	    }
 	    switch (*cstr) {
 	    case ' ':		/* space */
-		if (mudconf.space_compress) {
+		if ( mudconf.space_compress && !mudstate.no_space_compress ) {
 		    if (first)
 			rstr++;
 		    else if (cstr[-1] == ' ')
@@ -800,7 +803,7 @@ static const int mux_isprint[256] =
 void parse_ansi(char *string, char *buff, char **bufptr, char *buff2, char **buf2ptr, char *buff_utf, char **bufuptr)
 {
     char *bufc, *bufc2, *bufc_utf, s_twochar[3], s_final[80], s_intbuf[4], *ptr;
-    char s_utfbuf[2], s_ucpbuf[7], *tmpptr = NULL, *tmp;
+    char s_utfbuf[3], s_ucpbuf[10], *tmpptr = NULL, *tmp, ucssubstitute;
     unsigned char ch1, ch2, ch;
     int i_tohex, accent_toggle, i_extendcnt, i_extendnum, i_utfnum, i_utfcnt, i_inansi;
 
@@ -912,6 +915,9 @@ void parse_ansi(char *string, char *buff, char **bufptr, char *buff2, char **buf
                        || ((strlen(string) > 7) && (*(string+7) == '>')))) {
                     string++;
                     i_utfcnt = 0;
+
+                    /* Always initialize the buffer which is *NOW* 1 more than it'll handle */
+                    memset(s_ucpbuf, '\0', sizeof(s_ucpbuf));
                     while ( *string ) {
                         if (i_utfcnt >= 6 || *string == '>') {
                             break;
@@ -921,6 +927,7 @@ void parse_ansi(char *string, char *buff, char **bufptr, char *buff2, char **buf
                         i_utfcnt++;
                         string++;
                     }
+                    /* We leave this in for double jeopardy */
                     s_ucpbuf[i_utfcnt] = '\0'; // Null fix by eery
                     
                     i_utfnum = atoi(s_ucpbuf);
@@ -940,9 +947,20 @@ void parse_ansi(char *string, char *buff, char **bufptr, char *buff2, char **buf
                         i_utfcnt++;
                         tmp++;
                     }
-		    free_sbuf(tmpptr);
-                    safe_chr(' ', buff2, &bufc2);
-                    safe_chr(' ', buff, &bufc);
+                    free_sbuf(tmpptr);
+                    ucssubstitute = ucs32toascii(strtol(s_ucpbuf, NULL, 16));
+                    safe_chr(ucssubstitute, buff2, &bufc2);
+                    safe_chr(ucssubstitute, buff, &bufc);
+                } else if ( (*string == BEEP_CHAR) && isdigit(*(string+1)) && isdigit(*(string+2)) && isdigit(*(string+3)) && (*(string+4) == '>') ) {
+                   s_intbuf[0] = *(string+1);
+                   s_intbuf[1] = *(string+2);
+                   s_intbuf[2] = *(string+3);
+                   i_extendnum = atoi(s_intbuf);
+                   safe_chr((char) i_extendnum, buff2, &bufc2);
+                   safe_chr((char) i_extendnum, buff, &bufc);
+                   safe_chr((char) i_extendnum, buff_utf, &bufc_utf);
+                   i_extendcnt+=4;
+                   string+=4;
                 } else if ( isdigit(*(string)) && isdigit(*(string+1)) && isdigit(*(string+2)) && (*(string+3) == '>') ) {
                    s_intbuf[0] = *(string);
                    s_intbuf[1] = *(string+1);
@@ -960,7 +978,7 @@ void parse_ansi(char *string, char *buff, char **bufptr, char *buff2, char **buf
                       }
                       safe_chr((char) i_extendnum, buff2, &bufc2);
                       safe_chr((char) i_extendnum, buff_utf, &bufc_utf);
-                      safe_chr(' ', buff, &bufc);                         
+                      safe_chr('?', buff, &bufc);                         
                    } else {
                       switch(i_extendnum) {
                          case 251:
@@ -1350,7 +1368,7 @@ mushexec(dbref player, dbref cause, dbref caller, int eval, char *dstr,
     char *fargs[NFARGS], *sub_txt, *sub_buf, *sub_txt2, *sub_buf2, *orig_dstr, sub_char;
     char *buff, *bufc, *tstr, *tbuf, *tbufc, *savepos, *atr_gotten, *savestr, *s_label;
     char savec, ch, *ptsavereg, *savereg[MAX_GLOBAL_REGS], *t_bufa, *t_bufb, *t_bufc, c_last_chr,
-         *nptsavereg, *saveregname[MAX_GLOBAL_REGS];
+         *nptsavereg, *saveregname[MAX_GLOBAL_REGS], c_allargs;
     char *trace_array[3], *trace_buff, *trace_buffptr;
     static char tfunbuff[33], tfunlocal[100];
     dbref aowner, twhere, sub_aowner;
@@ -1370,8 +1388,9 @@ mushexec(dbref player, dbref cause, dbref caller, int eval, char *dstr,
 #ifdef BANGS
     int bang_not, bang_string, bang_truebool, bang_yes;
     int regbang_not, regbang_string, regbang_truebool, regbang_yes;
-    char *tbangc, *bufc2, *tbang_tmp;
+    char *tbangc, *bufc2;
 #endif
+    char *tbang_tmp; // Not exclusively Bang related.
     static const char *subj[5] =
     {"", "it", "she", "he", "they"};
     static const char *poss[5] =
@@ -1503,7 +1522,7 @@ mushexec(dbref player, dbref cause, dbref caller, int eval, char *dstr,
 	    /* A space.  Add a space if not compressing or if
 	     * previous char was not a space */
 
-	    if (!(mudconf.space_compress && at_space)) {
+	    if (!((mudconf.space_compress && !mudstate.no_space_compress) && at_space)) {
 		safe_chr(' ', buff, &bufc);
 		at_space = 1;
 	    }
@@ -1872,6 +1891,13 @@ mushexec(dbref player, dbref cause, dbref caller, int eval, char *dstr,
                       safe_str(mudstate.curr_cmd_hook, buff, &bufc);
                    }
                    dstr++;
+                } else if ( *(dstr+1) == 'p' ) {
+                   if ( *(mudstate.curr_plrcmd) && *(mudstate.curr_cmd_hook) ) {
+                      // We also check for curr_cmd_hook here to make sure this
+                      // only works inside hooks :)
+                      safe_str(mudstate.curr_plrcmd, buff, &bufc);
+                   }
+                   dstr++;
                 /* Do the bangs if there */
                 } else if ( isdigit((unsigned char)*(dstr+1)) ) {
                    if ( isdigit((unsigned char)*(dstr+2)) ) {
@@ -2114,7 +2140,7 @@ mushexec(dbref player, dbref cause, dbref caller, int eval, char *dstr,
 		   safe_str(tbuf, buff, &bufc);
                 }
 		break;
-	    case 'A':		/* Absolute posessive */
+	    case 'A':		/* Absolute possessive */
 	    case 'a':		/* idea from Empedocles */
 		tbuf = alloc_lbuf("exec.absolutepossessive");
 		if (gender < 0)
@@ -2168,11 +2194,32 @@ mushexec(dbref player, dbref cause, dbref caller, int eval, char *dstr,
                 free_sbuf(tbuf);
                 break;
              case '+':         /* Number of args passed */
-                 tbuf = alloc_sbuf("exec.numargcalls");
-                 sprintf(tbuf, "%d", ncargs);
-                 safe_str(tbuf, buff, &bufc);
-                 free_sbuf(tbuf);
-                 break;
+                if ( *(dstr+1) == '!' ) {
+                   dstr++;
+                   c_allargs = ' ';
+                   /* Print every command with space delimit by default */
+                   if ( *(dstr+1) && (*(dstr+2) == '!') ) { /* specified delimiter */
+                      dstr++;
+                      c_allargs = *dstr;
+                      dstr++;
+                   }
+                   for ( i = 0; i < ncargs; i++ ) {
+                      if ( i != 0 ) {
+                         if ( cargs[i] != NULL ) {
+                            safe_chr(c_allargs, buff, &bufc);
+                         }
+                      }
+                      if ( cargs[i] != NULL ) {
+                         safe_str(cargs[i], buff, &bufc); 
+                      }
+                   }
+                } else {
+                   tbuf = alloc_sbuf("exec.numargcalls");
+                   sprintf(tbuf, "%d", ncargs);
+                   safe_str(tbuf, buff, &bufc);
+                   free_sbuf(tbuf);
+                }
+                break;
              case '?':         /* Function invocation and depth counts */
                  tbuf = alloc_sbuf("exec.functiondepths");
                  sprintf(tbuf, "%d %d", mudstate.func_invk_ctr, (mudstate.ufunc_nest_lev + mudstate.func_nest_lev));
@@ -2188,7 +2235,9 @@ mushexec(dbref player, dbref cause, dbref caller, int eval, char *dstr,
                     inumext = 1;
                  }
                  if ( dstr && *dstr ) {
+#ifdef BANGS
                     setup_bangs(&regbang_not, &regbang_yes, &regbang_string, &regbang_truebool, &dstr);
+#endif
                     inum_val = atoi(dstr);
                     if( inum_val < 0 || ( inum_val > mudstate.iter_inum ) ) {   
                         safe_str( "#-1 ARGUMENT OUT OF RANGE", buff, &bufc );
@@ -2197,6 +2246,7 @@ mushexec(dbref player, dbref cause, dbref caller, int eval, char *dstr,
                         }
                     } else {   
                         if ( (*dstr == 'l') || (*dstr == 'L') ) {
+#ifdef BANGS
                            if ( regbang_not || regbang_yes ) {
                               tbang_tmp = alloc_lbuf("bang_qregs");
                               if ( inumext ) {
@@ -2208,6 +2258,7 @@ mushexec(dbref player, dbref cause, dbref caller, int eval, char *dstr,
                               safe_str(tbang_tmp, buff, &bufc);
                               free_lbuf(tbang_tmp);
                            } else {
+#endif
                               if ( inumext ) {
                                  tbang_tmp = alloc_sbuf("bang_num");
                                  sprintf(tbang_tmp, "%d", mudstate.iter_inumarr[0]);
@@ -2216,8 +2267,11 @@ mushexec(dbref player, dbref cause, dbref caller, int eval, char *dstr,
                               } else {
                                  safe_str( mudstate.iter_arr[0], buff, &bufc );
                               }
+#ifdef BANGS
                            }
+#endif
                         } else {
+#ifdef BANGS
                            if ( regbang_not || regbang_yes ) {
                               tbang_tmp = alloc_lbuf("bang_qregs");
                               if ( inumext ) {
@@ -2229,6 +2283,7 @@ mushexec(dbref player, dbref cause, dbref caller, int eval, char *dstr,
                               safe_str(tbang_tmp, buff, &bufc);
                               free_lbuf(tbang_tmp);
                            } else {
+#endif
                               if ( inumext ) {
                                  tbang_tmp = alloc_sbuf("bang_num");
                                  sprintf(tbang_tmp, "%d", mudstate.iter_inumarr[mudstate.iter_inum - inum_val]);
@@ -2237,7 +2292,9 @@ mushexec(dbref player, dbref cause, dbref caller, int eval, char *dstr,
                               } else {
                                  safe_str( mudstate.iter_arr[mudstate.iter_inum - inum_val], buff, &bufc );
                               }
+#ifdef BANGS
                            }
+#endif
                            inum_val = inum_val / 10;
                            dstr += inum_val;
                         }
@@ -2252,7 +2309,9 @@ mushexec(dbref player, dbref cause, dbref caller, int eval, char *dstr,
             case 'D':
                  dstr++;
                  if ( dstr && *dstr ) {
+#ifdef BANGS
                     setup_bangs(&regbang_not, &regbang_yes, &regbang_string, &regbang_truebool, &dstr);
+#endif
                     inum_val = atoi(dstr);
                     if( inum_val < 0 || ( inum_val > (mudstate.dolistnest-1) ) ) {   
                        safe_str( "#-1 ARGUMENT OUT OF RANGE", buff, &bufc );
@@ -2261,6 +2320,7 @@ mushexec(dbref player, dbref cause, dbref caller, int eval, char *dstr,
                        }
                     } else {   
                        if ( (*dstr == 'l') || (*dstr == 'L') ) {
+#ifdef BANGS
                            if ( regbang_not || regbang_yes ) {
                               tbang_tmp = alloc_lbuf("bang_qregs");
                               strcpy(tbang_tmp, mudstate.dol_arr[0]);
@@ -2268,9 +2328,13 @@ mushexec(dbref player, dbref cause, dbref caller, int eval, char *dstr,
                               safe_str(tbang_tmp, buff, &bufc);
                               free_lbuf(tbang_tmp);
                           } else {
+#endif
                              safe_str( mudstate.dol_arr[0], buff, &bufc );
+#ifdef BANGS
                           }
+#endif
                        } else {
+#ifdef BANGS
                            if ( regbang_not || regbang_yes ) {
                               tbang_tmp = alloc_lbuf("bang_qregs");
                               strcpy(tbang_tmp, mudstate.dol_arr[mudstate.dolistnest - 1]);
@@ -2278,8 +2342,11 @@ mushexec(dbref player, dbref cause, dbref caller, int eval, char *dstr,
                               safe_str(tbang_tmp, buff, &bufc);
                               free_lbuf(tbang_tmp);
                           } else {
+#endif
                              safe_str( mudstate.dol_arr[(mudstate.dolistnest - 1) - inum_val], buff, &bufc );
+#ifdef BANGS
                           }
+#endif
                        }
                     }
                  } else {
@@ -2748,7 +2815,7 @@ mushexec(dbref player, dbref cause, dbref caller, int eval, char *dstr,
 	    tbufc = tbuf = alloc_sbuf("exec.tbuf");
 	    safe_sb_str(buff, tbuf, &tbufc);
   	    *tbufc = '\0';
-	    if (mudconf.space_compress) {
+	    if (mudconf.space_compress && !mudstate.no_space_compress) {
 		while ((--tbufc >= tbuf) && isspace((int)*tbufc));
 		tbufc++;
 	    }
@@ -3263,7 +3330,7 @@ mushexec(dbref player, dbref cause, dbref caller, int eval, char *dstr,
      * in the buffer, too.
      */
 
-    if (mudconf.space_compress && at_space && (bufc != buff))
+    if ( (mudconf.space_compress && !mudstate.no_space_compress) && at_space && (bufc != buff))
 	bufc--;
 
     *bufc = '\0';

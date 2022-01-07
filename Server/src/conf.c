@@ -279,6 +279,7 @@ NDECL(cf_init)
     mudconf.switch_substitutions = 0;
     mudconf.ifelse_substitutions = 0;
     mudconf.sideeffects = 32;  /* Enable only list() by default */
+    mudconf.raw_formatting = 1;       /* Allow raw formatting via } command */
     mudconf.sidefx_returnval = 0; /* sideeffects that create return dbref# if enabled */
     mudconf.safer_passwords = 0; /* If enabled, requires tougher to guess passwords */
     mudconf.sidefx_maxcalls = 1000; /* Maximum sideeffects allowed in a command */
@@ -292,6 +293,7 @@ NDECL(cf_init)
     mudconf.lcon_checks_dark = 0; /* lcon/xcon check dark/unfindable */
     mudconf.mail_hidden = 0;	/* mail/anon hidden who is sent to */
     mudconf.enforce_unfindable = 0; /* Enforce unfindable for locate crap */
+    mudconf.enforce_checksums = 0; /* Enforce checksums on command matching */
     mudconf.zones_like_parents = 0; /* Make zones search like @parents */
     mudconf.sub_override = 0;		/* %-sub override */
     mudconf.round_kludge = 0; /* Kludge workaround to fix rounding 2.5 to 2. [Loki] */
@@ -300,8 +302,8 @@ NDECL(cf_init)
     mudconf.break_compatibility = 0;	/* @break/@assert compatibility */
     mudconf.log_network_errors = 1;	/* Log Network Errors */
     mudconf.old_elist = 0;		/* Use old elist processing */
-    mudconf.mux_child_compat = 0;	/* MUX children() compatability */
-    mudconf.mux_lcon_compat = 0;	/* MUX lcon() compatability */
+    mudconf.mux_child_compat = 0;	/* MUX children() compatibility */
+    mudconf.mux_lcon_compat = 0;	/* MUX lcon() compatibility */
     mudconf.switch_search = 0;		/* Switch search and searchng */
     mudconf.signal_crontab = 0;		/* USR1 signals crontab file reading */
     mudconf.max_name_protect = 0;
@@ -328,6 +330,7 @@ NDECL(cf_init)
     mudconf.mysql_delay = 0;		/* Toggle to turn on/off delay > 0 sets delay */
     mudconf.name_with_desc = 0;		/* Enable state to allow looking at names of things you can't examine */
     mudconf.proxy_checker = 0;		/* Proxy Checker -- Not very reliable */
+    mudconf.idle_cmdcount = -1;  /* Make repeated commands not touch idle time */
     mudconf.idle_stamp = 0;             /* Enable for idle checking on players */
     mudconf.idle_stamp_max = 10;        /* Enable for idle checking on players 10 max default */
     mudconf.penn_setq = 0;		/* Penn compatible setq/setr functions */
@@ -385,6 +388,7 @@ NDECL(cf_init)
     for ( i = 0; i < TOTEM_SLOTS; i++ ) {
        mudstate.totem_slots[i] = 0;
     }
+    mudstate.no_space_compress = 0;	/* Override space compression */
     mudstate.no_announce = 0;		/* Do not broadcast announcements */
     mudstate.global_error_inside = 0;	/* Global Error Object is being executed */
     mudstate.nested_control = 0;	/* Nested controlocks - 50 hardcode ceiling */
@@ -504,9 +508,9 @@ NDECL(cf_init)
     mudconf.hackattr_nowiz = 0;	/* All _attrs defined to be wizard only */
     mudconf.hackattr_see = 0;	/* All _attrs defined to be viewable by wizard only */
     mudconf.penn_playercmds = 0; /* $cmds on players like PENN */
-    mudconf.format_compatibility = 0; /* format attributes mux/penn compatible */
+    mudconf.format_compatibility = 0; /* format attributes MUX/penn compatible */
     mudconf.brace_compatibility = 0; /* MUX/TM3 brace {} compatibility with parser */
-    mudconf.ifelse_compat = 0; /* ifelse() / @ifelse Mux string boolean compatibility */
+    mudconf.ifelse_compat = 0; /* ifelse() / @ifelse MUX string boolean compatibility */
     mudconf.penn_switches = 0;  /* switch() and switchall() behave like PENN if '1' */
     mudconf.float_switches = 0;  /* switch() and switchall() handle float if '1' */
     mudconf.lattr_default_oldstyle = 0;	/* lattr() error's has errors snuffed */
@@ -716,6 +720,7 @@ NDECL(cf_init)
     mudstate.api_lastsite_cnt = 0;
     mudconf.lastsite_paranoia = 0; /* 0-off, 1-register, 2-forbid */
     mudconf.pcreate_paranoia = 0; /* 0-off, 1-register, 2-forbid */
+    mudconf.pcreate_paranoia_fail = 1; /* Be paranoid even about failed creates */
     mudconf.max_lastsite_cnt = 20;	/* Shouldn't connect more than 20 times in X period */
     mudconf.max_lastsite_api = 60;	/* API Shouldn't connect more than 60 times in X period */
     mudconf.min_con_attempt = 60;	/* 60 seconds default */
@@ -783,6 +788,7 @@ NDECL(cf_init)
     mudstate.curr_player = NOTHING;
     mudstate.curr_enactor = NOTHING;
     mudstate.curr_cmd = (char *) "< none >";
+    mudstate.curr_plrcmd = (char *) "< none >";
     memset(mudstate.curr_cmd_hook, '\0', LBUF_SIZE);
     mudstate.shutdown_flag = 0;
     mudstate.reboot_flag = 0;
@@ -1566,7 +1572,13 @@ NAMETAB bool_names[] =
 
 CF_HAND(cf_bool)
 {
-    *vp = search_nametab(GOD, bool_names, str);
+    if ( str && *str ) {
+       *vp = search_nametab(GOD, bool_names, str);
+    } else {
+       if ( Good_obj(player) )
+          notify_quiet(player, "Expected a boolean argument.");
+       *vp = -1;
+    }
     if (*vp == -1)
 	*vp = 0;
     return 0;
@@ -1596,7 +1608,13 @@ CF_HAND(cf_option)
 {
     int i;
 
-    i = search_nametab(GOD, (NAMETAB *) extra, str);
+    if ( str && *str ) {
+       i = search_nametab(GOD, (NAMETAB *) extra, str);
+    } else {
+       if ( Good_obj(player) )
+          notify_quiet(player, "Expected a valid value.");
+       i = -1;
+    }
     if (i == -1) {
 	cf_log_notfound(player, cmd, "Value", str);
 	return -1;
@@ -1651,7 +1669,7 @@ CF_HAND(cf_dynguest)
       if ( noret_val == -1 ) {
          memset(playbuff, 0, sizeof(playbuff));
 	 STARTLOG(LOG_STARTUP, "CNF", "DYNGUEST")
-	 sprintf(playbuff, "Invalid player list '%.900s' for paramater '%s'.", str, cmd);
+	 sprintf(playbuff, "Invalid player list '%.900s' for parameter '%s'.", str, cmd);
 	 log_text(playbuff);
 	 ENDLOG
       } else {
@@ -3870,7 +3888,7 @@ CF_HAND(cf_include)
            }
         }
 	for (zp = zp - 1; zp >= ap && isspace((int)*zp); zp--)
-	    *zp = '\0';		/* zap trailing spcs */
+	    *zp = '\0';		/* zap trailing spaces */
 
 	cf_set(cp, ap, player);
 	fgets(buf, LBUF_SIZE, fp);
@@ -3915,7 +3933,7 @@ CONF conftable[] =
               "                             Default: 60   Value: %d"},
     {(char *) "alias",
      cf_cmd_alias, CA_GOD | CA_IMMORTAL, (int *) &mudstate.command_htab, 0, 0, CA_WIZARD,
-     (char *) "Define command alises."},
+     (char *) "Define command aliases."},
     {(char *) "allow_ansinames",
      cf_int, CA_GOD | CA_IMMORTAL, &mudconf.allow_ansinames, 0, 0, CA_PUBLIC,
      (char *) "Allow names to be ansified?\r\n"\
@@ -3928,7 +3946,7 @@ CONF conftable[] =
      (char *) "Enable alternate inventories (worn/wield)."},
     {(char *) "altover_inv",
      cf_bool, CA_GOD | CA_IMMORTAL, &mudconf.altover_inv, 0, 0, CA_PUBLIC,
-     (char *) "Seperate displays of inventories (worn/wield)."},
+     (char *) "Separate displays of inventories (worn/wield)."},
     {(char *) "always_blind",
      cf_bool, CA_GOD | CA_IMMORTAL, &mudconf.always_blind, 0, 0, CA_PUBLIC,
      (char *) "BLIND flag reversed (always blind?)"},
@@ -3967,17 +3985,17 @@ CONF conftable[] =
      (char *) "BLIND flag snuff aconnect/adisconnect?"},
     {(char *) "blacklist_max",
      cf_verifyint, CA_GOD | CA_IMMORTAL, &mudconf.blacklist_max, 5000000, 1000, CA_WIZARD,
-     (char *) "Max value allowed for blacklistt loading.\r\n"\
+     (char *) "Max value allowed for blacklist loading.\r\n"\
               "(Range: 1000-5000000 - 120+ warn)   Default: 60   Value: %d"},
     {(char *) "brace_compatibility",
      cf_bool, CA_GOD | CA_IMMORTAL, &mudconf.brace_compatibility, 0, 0, CA_WIZARD,
      (char *) "Are braces MUX/TM3 compatible?"},
     {(char *) "break_compatibility",
      cf_bool, CA_GOD | CA_IMMORTAL, &mudconf.break_compatibility, 0, 0, CA_WIZARD,
-     (char *) "Are @break/@assert double-evalled and earlier 3.9 compatable?"},
+     (char *) "Are @break/@assert double-evaled and earlier 3.9 compatible?"},
     {(char *) "cache_depth",
      cf_int, CA_DISABLED, &mudconf.cache_depth, 0, 0, CA_WIZARD,
-     (char *) "Show what the current cache debth is.\r\n"\
+     (char *) "Show what the current cache depth is.\r\n"\
               "                             Default: 10   Value: %d"},
     {(char *) "cache_names",
      cf_bool, CA_DISABLED, &mudconf.cache_names, 0, 0, CA_WIZARD,
@@ -4055,7 +4073,7 @@ CONF conftable[] =
     {(char *) "config_access",
      cf_cf_access, CA_GOD | CA_IMMORTAL, NULL,
      (pmath2) access_nametab, (pmath2) access_nametab2, CA_WIZARD,
-     (char *) "Define config paramater access permissions."},
+     (char *) "Define config parameter access permissions."},
     {(char *) "conn_timeout",
      cf_int, CA_GOD | CA_IMMORTAL, &mudconf.conn_timeout, 0, 0, CA_WIZARD,
      (char *) "Define what the timeout is on connect screen.\r\n"\
@@ -4126,7 +4144,7 @@ CONF conftable[] =
               "                             Default: 20  Value: %d"},
     {(char *) "map_delim_space",
      cf_bool, CA_GOD | CA_IMMORTAL, &mudconf.map_delim_space, 0, 0, CA_PUBLIC,
-     (char *) "MAP() uses space/seperator?"},
+     (char *) "MAP() uses space/separator?"},
     {(char *) "max_cpu_cycles",
      cf_int, CA_GOD | CA_IMMORTAL, &mudconf.max_cpu_cycles, 0, 0, CA_WIZARD,
      (char *) "Max cpu slams allowed before smackdown.\r\n"\
@@ -4191,7 +4209,7 @@ CONF conftable[] =
               "                             Default: 42010   Value: %d"},
     {(char *) "delim_null",
      cf_bool, CA_GOD | CA_IMMORTAL, &mudconf.delim_null, 0, 0, CA_PUBLIC,
-     (char *) "Are @@ in output seperator considered a null?"},
+     (char *) "Are @@ in output separator considered a null?"},
     {(char *) "admin_object",
      cf_int, CA_GOD | CA_IMMORTAL, &mudconf.admin_object, 0, 0, CA_WIZARD,
      (char *) "The object that will be used to load and save inline conf parameters.   Default: -1   Value: %d"},
@@ -4264,6 +4282,9 @@ CONF conftable[] =
     {(char *) "elements_compat",
      cf_bool, CA_GOD | CA_IMMORTAL, &mudconf.elements_compat, 0, 0, CA_PUBLIC,
      (char *) "Enable elements() compatibility to elementsmux?"},
+    {(char *) "enforce_checksums",
+     cf_bool, CA_GOD | CA_IMMORTAL, &mudconf.enforce_checksums, 0, 0, CA_PUBLIC,
+     (char *) "Are CRC checksums required for $commands?"},
     {(char *) "enforce_unfindable",
      cf_bool, CA_GOD | CA_IMMORTAL, &mudconf.enforce_unfindable, 0, 0, CA_PUBLIC,
      (char *) "Is UNFINDABLE/DARK enforced for locations?"},
@@ -4367,7 +4388,7 @@ CONF conftable[] =
      (char *) "Override Totem TYPE Restrictions ala @flagdef"},
     {(char *) "tree_character",
      cf_string_chr, CA_GOD | CA_IMMORTAL, (int *) mudconf.tree_character, 2, 0, CA_WIZARD,
-     (char *) "The character for the tree seperator."},
+     (char *) "The character for the tree separator."},
     {(char *) "forbidapi_site",
      cf_site, CA_GOD | CA_IMMORTAL, (int *) &mudstate.access_list,
      H_FORBIDAPI, 0, CA_WIZARD,
@@ -4522,7 +4543,7 @@ CONF conftable[] =
      (char *) "Which attribute to extract the guild info from. (Default: GUILD)"},
     {(char *) "guest_namelist",
      cf_dynguest, CA_GOD | CA_IMMORTAL, (int *) mudconf.guest_namelist, 1000, 0, CA_WIZARD,
-     (char *) "List of guests that are dyanmically named."},
+     (char *) "List of guests that are dynamically named."},
     {(char *) "hackattr_nowiz",
      cf_bool, CA_GOD | CA_IMMORTAL, &mudconf.hackattr_nowiz, 0, 0, CA_WIZARD,
      (char *) "Are _attribs NOT wizard owned?"},
@@ -4544,7 +4565,7 @@ CONF conftable[] =
 			CA_PUBLIC, (char *) "Does hastype() always return 0 on invalid objects?"},
     {(char *) "heavy_cpu_max",
      cf_int, CA_GOD | CA_IMMORTAL, &mudconf.heavy_cpu_max, 0, 0, CA_WIZARD,
-     (char *) "Repitions allowed of heavy cpu functions.\r\n"\
+     (char *) "Repetitions allowed of heavy cpu functions.\r\n"\
               "                             Default: 50   Value: %d"},
     {(char *) "help_file",
      cf_string, CA_DISABLED, (int *) mudconf.help_file, 32, 0, CA_WIZARD,
@@ -4579,6 +4600,9 @@ CONF conftable[] =
      cf_int, CA_GOD | CA_IMMORTAL, &mudconf.icmd_obj, 0, 0, CA_PUBLIC,
      (char *) "The dbref# of the @icmd object.\r\n"\
               "                             Default: -1    Value: %d"},
+    {(char *) "idle_cmdcount",
+     cf_int, CA_GOD | CA_IMMORTAL, &mudconf.idle_cmdcount, 0, 0, CA_PUBLIC,
+     (char *) "Do repetitive commands not count towards idle time?"},
     {(char *) "idle_message",
      cf_bool, CA_GOD | CA_IMMORTAL, &mudconf.idle_message, 0, 0, CA_WIZARD,
      (char *) "Do wizards receive message when idled out?"},
@@ -4650,11 +4674,11 @@ CONF conftable[] =
      (char *) "IP address for the MUSH to listen on."},
     {(char *) "iter_loop_max",
      cf_int, CA_GOD | CA_IMMORTAL, &mudconf.iter_loop_max, 0, 0, CA_PUBLIC,
-     (char *) "Maximum iteration allowed for iter() infinite looops.\r\n"\
+     (char *) "Maximum iteration allowed for iter() infinite loops.\r\n"\
               "                             Default: 100000   Value: %d"},
     {(char *) "kill_guarantee_cost",
      cf_int, CA_GOD | CA_IMMORTAL, &mudconf.killguarantee, 0, 0, CA_PUBLIC,
-     (char *) "How much money to guarentee a kill?\r\n"\
+     (char *) "How much money to guarantee a kill?\r\n"\
               "                             Default: 100   Value: %d"},
     {(char *) "kill_max_cost",
      cf_int, CA_GOD | CA_IMMORTAL, &mudconf.killmax, 0, 0, CA_PUBLIC,
@@ -4725,7 +4749,7 @@ CONF conftable[] =
      (char *) "Can you see the name of what you look at?"},
     {(char *) "nand_compat",
      cf_bool, CA_GOD | CA_IMMORTAL, &mudconf.nand_compat, 0, 0, CA_PUBLIC,
-     (char *) "Use the pre-pl15 nand() behaviour?. (DEPRECATED)"},
+     (char *) "Use the pre-pl15 nand() behavior?. (DEPRECATED)"},
     {(char *) "machine_command_cost",
      cf_int, CA_GOD | CA_IMMORTAL, &mudconf.machinecost, 0, 0, CA_PUBLIC,
      (char *) "Cost of running things from a non-player (1/X)\r\n"\
@@ -4814,7 +4838,7 @@ CONF conftable[] =
               "                             Default: 2000   Value: %d"},
     {(char *) "money_lim_counc",
      cf_int, CA_GOD | CA_IMMORTAL, &mudconf.money_limit[3], 0, 0, CA_WIZARD,
-     (char *) "Define money for Councelor level @depower.\r\n"\
+     (char *) "Define money for Councilor level @depower.\r\n"\
               "                             Default: 5000   Value: %d"},
     {(char *) "money_name_plural",
      cf_string, CA_GOD | CA_IMMORTAL, (int *) mudconf.many_coins, 32, 0, CA_PUBLIC,
@@ -4834,7 +4858,7 @@ CONF conftable[] =
 #else
      cf_timerint, CA_GOD | CA_IMMORTAL, &mudconf.mtimer, 1000, 1, CA_WIZARD,
 #endif
-     (char *) "The milisecond timer offset to be used.\r\n"\
+     (char *) "The millisecond timer offset to be used.\r\n"\
               "                             Default: 10   Value: %d"},
     {(char *) "muddb_name",
      cf_string, CA_DISABLED, (int *) mudconf.muddb_name, 32, 0, CA_PUBLIC,
@@ -5029,6 +5053,9 @@ CONF conftable[] =
      cf_int, CA_GOD | CA_IMMORTAL, &mudconf.pcreate_paranoia, 0, 0, CA_WIZARD,
      (char *) "Define DoS create paranoia level (0, 1, 2).\r\n"\
               "                             Default: 0   Value: %d"},
+    {(char *) "pcreate_paranoia_fail",
+     cf_bool, CA_GOD | CA_IMMORTAL, &mudconf.pcreate_paranoia_fail, 0, 0, CA_WIZARD,
+     (char *) "Be paranoid even about failed creates?"},
     {(char *) "pemit_far_players",
      cf_bool, CA_GOD | CA_IMMORTAL, &mudconf.pemit_players, 0, 0, CA_PUBLIC,
      (char *) "Can you @pemit remotely to players?"},
@@ -5142,6 +5169,9 @@ CONF conftable[] =
     {(char *) "quotas",
      cf_bool, CA_GOD | CA_IMMORTAL, &mudconf.quotas, 0, 0, CA_PUBLIC,
      (char *) "Are @quotas being used?"},
+    {(char *) "raw_formatting",
+     cf_bool, CA_GOD | CA_IMMORTAL, &mudconf.raw_formatting, 0, 0, CA_PUBLIC,
+      (char *) "Allow } to do raw input formatting?"},
     {(char *) "rollbackmax",
      cf_verifyint, CA_GOD | CA_IMMORTAL, &mudconf.rollbackmax, 10000, 10, CA_WIZARD,
      (char *) "Max rollback (retry) count allowed.\r\n"\
@@ -5157,7 +5187,7 @@ CONF conftable[] =
      (char *) "Can you see names of remote things?"},
     {(char *) "recycling",
      cf_bool, CA_GOD | CA_IMMORTAL, &mudconf.recycle, 0, 0, CA_WIZARD,
-     (char *) "Is recyling dbref#'s currently enabled?"},
+     (char *) "Is recycling dbref#'s currently enabled?"},
     {(char *) "register_create_file",
      cf_string, CA_DISABLED, (int *) mudconf.regf_file, 32, 0, CA_WIZARD,
      (char *) "File used for registering."},
@@ -5218,7 +5248,7 @@ CONF conftable[] =
      (char *) "Path where LOGROOM logs are sent."},
     {(char *) "room_quota",
      cf_int, CA_GOD | CA_IMMORTAL, &mudconf.room_quota, 0, 0, CA_WIZARD,
-     (char *) "Ammount of quota each room takes.\r\n"\
+     (char *) "Amount of quota each room takes.\r\n"\
               "                             Default: 1   Value: %d"},
     {(char *) "rwho_data_port",
      cf_int, CA_GOD | CA_IMMORTAL, &mudconf.rwho_data_port, 0, 0, CA_WIZARD,
@@ -5251,7 +5281,7 @@ CONF conftable[] =
               "                             Default: 5   Value: %d"},
     {(char *) "safe_wipe",
      cf_bool, CA_GOD | CA_IMMORTAL, &mudconf.safe_wipe, 0, 0, CA_PUBLIC,
-     (char *) "@wiping SAFE/INDESTRUCTABLE things blocked?"},
+     (char *) "@wiping SAFE/INDESTRUCTIBLE things blocked?"},
     {(char *) "safer_ufun",
      cf_bool, CA_GOD | CA_IMMORTAL, &mudconf.safer_ufun, 0, 0, CA_PUBLIC,
      (char *) "Enforcement of protected u-evals?"},
@@ -5290,7 +5320,7 @@ CONF conftable[] =
      (char *) "Can you see dark things you control?"},
     {(char *) "sha2rounds",
      cf_verifyint, CA_GOD | CA_IMMORTAL, &mudconf.sha2rounds, 999999, 5000, CA_WIZARD,
-     (char *) "SHA2 round recursion for password encryptions.\r\n"\
+     (char *) "SHA2 round recursion for password encryption.\r\n"\
               "    [5000-999999]            Default: 5000        Value: %d"},
     {(char *) "showother_altinv",
      cf_bool, CA_GOD | CA_IMMORTAL, &mudconf.showother_altinv, 0, 0, CA_PUBLIC,
@@ -5318,7 +5348,7 @@ CONF conftable[] =
      (char *) "Does signal USR1 optionally read cron file?"},
     {(char *) "space_compress",
      cf_bool, CA_GOD | CA_IMMORTAL, &mudconf.space_compress, 0, 0, CA_PUBLIC,
-     (char *) "Spaces compressed?"},
+     (char *) "Spaces compressed (overridden with no_space_compress state)?"},
     {(char *) "spam_limit",
      cf_int, CA_GOD | CA_IMMORTAL, &mudconf.spam_limit, 0, 0, CA_PUBLIC,
      (char *) "Ceiling of commands per minute..\r\n"\

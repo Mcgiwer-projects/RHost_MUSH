@@ -423,16 +423,27 @@ void do_teleport(dbref player, dbref cause, int key, char *slist,
  * do_force_prefixed: Interlude to do_force for the # command
  */
 
-void do_force_prefixed (dbref player, dbref cause, int key, 
-		char *command, char *args[], int nargs)
-{
-char	*cp;
+void do_force_prefixed(dbref player, dbref cause, int key, 
+                       char *command, char *args[], int nargs) {
+   char *cp;
 
-	cp=parse_to(&command, ' ', 0);
-	if (!command) return;
-	while (*command && isspace((int)*command)) command++;
-	if (*command)
-		do_force(player, cause, key, cp, command, args, nargs);
+   cp = parse_to(&command, ' ', 0);
+
+   if (!command) {
+       return;
+   }
+
+   while (*command && isspace((int)*command)) {
+      command++;
+   }
+
+   if (*command) {
+      if ( (*cp == '#') && *(cp+1) == '#' ) {
+         do_force(player, cause, key | FORCE_INLINE, cp+1, command, args, nargs);
+      } else {
+         do_force(player, cause, key, cp, command, args, nargs);
+      }
+   }
 }
 
 /* ---------------------------------------------------------------------------
@@ -458,9 +469,15 @@ dbref	victim;
            mudstate.force_halt = 1;
         } else
            mudstate.force_halt = 0;
-	/* force victim to do command */
-	wait_que(victim, player, 0, NOTHING, command, args, nargs,
-		mudstate.global_regs, mudstate.global_regsname);
+        /* If /inline call sudo */
+        if ( key & FORCE_INLINE ) {
+           /* If you want additional keys to @force/inline, use @sudo */
+           do_sudo(player, cause, 0, what, command, args, nargs);
+        } else {
+	   /* force victim to do command */
+	   wait_que(victim, player, 0, NOTHING, command, args, nargs,
+		   mudstate.global_regs, mudstate.global_regsname);
+        }
 }
 
 /* ---------------------------------------------------------------------------
@@ -500,7 +517,7 @@ int i_jump, i_rollback;
   i_rollback = mudstate.rollbackcnt;
   mudstate.jumpst = mudstate.rollbackcnt = 0;
   strcpy(mudstate.rollback, command);
-  process_command(player, player, 0, command, args, nargs, 0, mudstate.no_hook);
+  process_command(player, player, 0, command, args, nargs, 0, mudstate.no_hook, mudstate.no_space_compress);
   mudstate.jumpst = i_jump;
   mudstate.rollbackcnt = i_rollback;
   strcpy(mudstate.rollback, s_rollback);
@@ -546,7 +563,7 @@ int	count, aflags, aflags2, i, i_array[LIMIT_MAX];
               newplayer = NOTHING;
         }
         if ( Good_chk(newplayer) ) {
-           s_chkattr = atr_get(player, A_DESTVATTRMAX, &aowner2, &aflags2);
+           s_chkattr = atr_get(newplayer, A_DESTVATTRMAX, &aowner2, &aflags2);
            if ( *s_chkattr ) {
               i_array[0] = i_array[2] = 0;
               i_array[4] = i_array[1] = i_array[3] = -2;
@@ -556,15 +573,15 @@ int	count, aflags, aflags2, i, i_array[LIMIT_MAX];
                   i_array[i] = atoi(s_buffptr);
               }
               if ( i_array[3] != -1 ) {
-                 if ( (i_array[2]+1) > (i_array[3] == -2 ? (Wizard(player) ? mudconf.wizmax_dest_limit : mudconf.max_dest_limit) : i_array[3]) ) {
-                    notify_quiet(player,"@destruction limit maximum reached.");
+                 if ( (i_array[2]+1) > (i_array[3] == -2 ? (Wizard(newplayer) ? mudconf.wizmax_dest_limit : mudconf.max_dest_limit) : i_array[3]) ) {
+                    notify_quiet(newplayer,"@destruction limit maximum reached.");
                     STARTLOG(LOG_SECURITY, "SEC", "TURTLE")
                       log_text("@destruction limit maximum reached -> Player: ");
-                      log_name(player);
+                      log_name(newplayer);
                       log_text(" Object: ");
                       log_name(victim);
                     ENDLOG
-                    broadcast_monitor(player,MF_VLIMIT,"[TURTLE] DESTROY MAXIMUM",
+                    broadcast_monitor(newplayer,MF_VLIMIT,"[TURTLE] DESTROY MAXIMUM",
                             NULL, NULL, victim, 0, 0, NULL);
                     free_lbuf(s_chkattr);
                     return;
@@ -573,10 +590,10 @@ int	count, aflags, aflags2, i, i_array[LIMIT_MAX];
               s_mbuf = alloc_mbuf("vattr_check");
               sprintf(s_mbuf, "%d %d %d %d %d", i_array[0], i_array[1],
                                              i_array[2]+1, i_array[3], i_array[4]);
-              atr_add_raw(player, A_DESTVATTRMAX, s_mbuf);
+              atr_add_raw(newplayer, A_DESTVATTRMAX, s_mbuf);
               free_mbuf(s_mbuf);
            } else {
-              atr_add_raw(player, A_DESTVATTRMAX, (char *)"0 -2 1 -2 -2");
+              atr_add_raw(newplayer, A_DESTVATTRMAX, (char *)"0 -2 1 -2 -2");
            }
            free_lbuf(s_chkattr);
         }
@@ -732,7 +749,7 @@ int	count, aflags, i, i_array[LIMIT_MAX], aflags2;
               newplayer = NOTHING;
         }
         if ( Good_chk(newplayer) ) {
-           s_chkattr = atr_get(player, A_DESTVATTRMAX, &aowner2, &aflags2);
+           s_chkattr = atr_get(newplayer, A_DESTVATTRMAX, &aowner2, &aflags2);
            if ( *s_chkattr ) {
               i_array[0] = i_array[2] = 0;
               i_array[4] = i_array[1] = i_array[3] = -2;
@@ -742,15 +759,15 @@ int	count, aflags, i, i_array[LIMIT_MAX], aflags2;
                   i_array[i] = atoi(s_buffptr);
               }
               if ( i_array[3] != -1 ) {
-                 if ( (i_array[2]+1) > (i_array[3] == -2 ? (Wizard(player) ? mudconf.wizmax_dest_limit : mudconf.max_dest_limit) : i_array[3]) ) {
-                    notify_quiet(player,"@destruction limit maximum reached.");
+                 if ( (i_array[2]+1) > (i_array[3] == -2 ? (Wizard(newplayer) ? mudconf.wizmax_dest_limit : mudconf.max_dest_limit) : i_array[3]) ) {
+                    notify_quiet(newplayer,"@destruction limit maximum reached.");
                     STARTLOG(LOG_SECURITY, "SEC", "TOAD")
                       log_text("@destruction limit maximum reached -> Player: ");
-                      log_name(player);
+                      log_name(newplayer);
                       log_text(" Object: ");
                       log_name(victim);
                     ENDLOG
-                    broadcast_monitor(player,MF_VLIMIT,"[TOAD] DESTROY MAXIMUM",
+                    broadcast_monitor(newplayer,MF_VLIMIT,"[TOAD] DESTROY MAXIMUM",
                             NULL, NULL, victim, 0, 0, NULL);
                     free_lbuf(s_chkattr);
                     return;
@@ -759,10 +776,10 @@ int	count, aflags, i, i_array[LIMIT_MAX], aflags2;
               s_mbuf = alloc_mbuf("vattr_check");
               sprintf(s_mbuf, "%d %d %d %d %d", i_array[0], i_array[1],
                                              i_array[2]+1, i_array[3], i_array[4]);
-              atr_add_raw(player, A_DESTVATTRMAX, s_mbuf);
+              atr_add_raw(newplayer, A_DESTVATTRMAX, s_mbuf);
               free_mbuf(s_mbuf);
            } else {
-              atr_add_raw(player, A_DESTVATTRMAX, (char *)"0 -2 1 -2 -2");
+              atr_add_raw(newplayer, A_DESTVATTRMAX, (char *)"0 -2 1 -2 -2");
            }
            free_lbuf(s_chkattr);
         }
@@ -937,10 +954,10 @@ void do_conncheck(dbref player, dbref cause, int key)
     tprp_buff = tpr_buff = alloc_lbuf("do_dolist");
     if (*(d->userid)) {
       notify(player, safe_tprintf(tpr_buff, &tprp_buff, "%-23s %-22s %4d %7d %s@%s",
-             buff, buff2, d->descriptor, ((key & CONNCHECK_QUOTA) ? d->quota : d->command_count), d->userid, d->addr));
+             buff, buff2, d->descriptor, ((key & CONNCHECK_QUOTA) ? d->quota : d->command_count), d->userid, d->longaddr));
     } else {
       notify(player, safe_tprintf(tpr_buff, &tprp_buff, "%-23s %-22s %4d %7d %s",
-             buff, buff2, d->descriptor, ((key & CONNCHECK_QUOTA) ? d->quota : d->command_count), d->addr));
+             buff, buff2, d->descriptor, ((key & CONNCHECK_QUOTA) ? d->quota : d->command_count), d->longaddr));
     }
     free_lbuf(tpr_buff);
   }
@@ -1908,7 +1925,7 @@ void quota_xfer(dbref player, dbref who, char *amount, char *src, char *dest)
     else rval = q_check(player, who, num, *src, *dest, 0, 1);
   }
   if (rval)
-    notify(player,"Quota transfered.");
+    notify(player,"Quota transferred.");
   else
     notify(player,"Transfer failed.");
 }
@@ -2179,22 +2196,31 @@ NAMETAB enable_names[] = {
 
 void do_global (dbref player, dbref cause, int key, char *flag)
 {
-int	flagvalue;
+   int flagvalue;
 
-	/* Set or clear the indicated flag */
+   /* Set or clear the indicated flag */
 
-	flagvalue = search_nametab(player, enable_names, flag);
-	if (flagvalue == -1) {
-		notify_quiet(player, "I don't know about that flag.");
-	} else if (key == GLOB_ENABLE) {
-		mudconf.control_flags |= flagvalue;
-		if (!Quiet(player)) notify_quiet(player, "Enabled.");
-	} else if (key == GLOB_DISABLE) {
-		mudconf.control_flags &= ~flagvalue;
-		if (!Quiet(player)) notify_quiet(player, "Disabled.");
-	} else {
-		notify_quiet(player, "Illegal combination of switches.");
-	}
+   if ( flag && *flag ) {
+      flagvalue = search_nametab(player, enable_names, flag);
+   } else {
+      flagvalue = -1;
+   }
+
+   if (flagvalue == -1) {
+      notify_quiet(player, "I don't know about that flag.");
+   } else if (key == GLOB_ENABLE) {
+      mudconf.control_flags |= flagvalue;
+      if (!Quiet(player)) { 
+         notify_quiet(player, "Enabled.");
+      }
+   } else if (key == GLOB_DISABLE) {
+      mudconf.control_flags &= ~flagvalue;
+      if (!Quiet(player)) {
+         notify_quiet(player, "Disabled.");
+      }
+   } else {
+      notify_quiet(player, "Illegal combination of switches.");
+   }
 }
 
 void convtonorm(dbref who, int addval)
@@ -2502,7 +2528,7 @@ static int file_select(const struct dirent *entry)
 }
 
 #ifdef NEED_SCANDIR
-/* Some unix systems do not handle scandir -- so we build one for them */
+/* Some UNIX systems do not handle scandir -- so we build one for them */
 int
 scandir(const char *directory_name,
             struct dirent ***array_pointer,
@@ -2926,7 +2952,7 @@ void do_snapshot(dbref player, dbref cause, int key, char *buff1, char *buff2)
                return;
                break;
          }
-         /* Fix up the ol object - it's probably corrupted if missmatched attributes */
+         /* Fix up the ol object - it's probably corrupted if mismatched attributes */
          i_dirnums = -1;
          while ( i_dirnums == -1 ) {
             i_dirnums = atrcint(player, thing, 1);

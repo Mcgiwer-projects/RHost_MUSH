@@ -1,17 +1,17 @@
 /* mail.c hardcoded mail system by Seawolf.  Requires ndbm.  Will not *
  * work with dbm due to needs of having the mail database and the     *
- * mush databse open at the same time.                                *
+ * mush database open at the same time.                                *
  * NOTE: mail/write can be called using a single char start like " is *
  * for say. To do so, just call the mail handler with M_WRITE | M_ALL *
  * for the key. The mail_write function is setup for some Rhostshyl   *
- * specfic handling of when the intro char is not valid...i.e. it     *
+ * specific handling of when the intro char is not valid...i.e. it     *
  * can't be used until after the write message is started normally.   *
  * For others, comment out or delete the #define RHOSTSHYL below      */
 
 /************************************************************************
  * Warning:  For full conceptual understanding of the code contained    *
  *           herein, it is highly recommended that you become tired to  *
- *           such a degree as to require caffiene intake and that you   *
+ *           such a degree as to require caffeine intake and that you   *
  *           get a 12 pack of IBC(r) rootbeer and quickly down one      *
  *           before attempting to read this code.  You have been warned *
  ************************************************************************/
@@ -570,7 +570,7 @@ mail_proc_err()
     case WM_ALIAS:
 	log_text("Alias");
 	break;
-    case WM_MTIME:	/* remove and alock not here becaue they're switches */
+    case WM_MTIME:	/* remove and alock not here because they're switches */
 	log_text("Mtime");
 	break;
     case WM_DTIME:
@@ -3006,7 +3006,7 @@ void mail_read_func(dbref player, char *buf, dbref wiz, char *s_type, int key, c
         case 'B':  /* Body of Message */
                    safe_str(lbuf8, buff, bufcx);
                    break;
-        case 'I':  /* Messsage Index */
+        case 'I':  /* Message Index */
                    safe_str(safe_tprintf(tpr_buff, &tprp_buff, "%d", mesg), buff, bufcx);
                    break;
         case 'S':  /* Subject */
@@ -6127,7 +6127,7 @@ void myfgets(char *buf, FILE *fpt)
 
   pt1 = buf;
   in = fgetc(fpt);
-  while ((in != EOF) && (in) && (in != '\1')) {
+  while (!feof(fpt) && (in) && (in != '\1')) {
     *pt1++ = in;
     in = fgetc(fpt);
   }
@@ -6168,7 +6168,10 @@ void mnuke_read()
   nuke1 = fopen(nukename, "r");
   if (nuke1) {
     mudstate.nuke_status = 1;
-    while ((in1 = fgetc(nuke1)) != EOF) {
+    while (1) {
+      in1 = fgetc(nuke1);
+      if(feof(nuke1))
+         break;
       *buf1 = in1;
       myfgets(buf1+1,nuke1);
       mail_wipe(GOD,buf1);
@@ -6227,7 +6230,10 @@ void mail_load(dbref player)
     mail_error(player,MERR_DB);
     return;
   }
-  while ((input = fgetc(dump1)) != EOF) {
+  while (1) {
+    input = fgetc(dump1);
+    if(feof(dump1))
+       break;
     input = input - 'A' + 1;
     *(int *)sbuf1 = (int)input;
     keydata.dptr = sbuf1;
@@ -6401,7 +6407,10 @@ void mail_load(dbref player)
     dbm_store(mailfile,keydata,infodata,DBM_REPLACE);
   }
   fclose(dump1);
-  while ((input = fgetc(dump2)) != EOF) {
+  while (1) {
+    input = fgetc(dump2);
+    if(feof(dump2))
+       break;
     input = input - 'A' + 1;
     *(int *)sbuf1 = (int)input;
     keydata.dptr = sbuf1;

@@ -22,7 +22,7 @@
 &FUN_MAIL SoftFunctions=[ifelse(or(gt(%0,0),gt(strlen(%1),0)),[#-1 FEATURE NOT AVAILABLE],mailquick(ifelse(or(eq(strlen(%0),0),match(%0,me)),me,*%0),,ifelse(eq(strlen(%0),0),2,1)))]
 &MINMAX_MAIL SoftFunctions=1 2
 &FUN_POLL SoftFunctions=[doing()]
-&MINMAX_POLL SoftFunctions=1 1 
+&MINMAX_POLL SoftFunctions=1 1
 &FUN_BAND SoftFunctions=[mask(%0,%1,&)]
 &MINMAX_BAND SoftFunctions=2 2
 &FUN_BOR  SoftFunctions=[mask(%0,%1,|)]
@@ -94,8 +94,8 @@
 &FUNPR_SETSYMDIFF SoftFunctions=[setq(0,setinter(%0,%1,%2,%2,%4))][listunion(setdiff(%0,%q0,%2,%2,%4),setdiff(%1,%q0,%2,%2,%4),%2,%3)]
 &FUNPR_SETSYMDIFF SoftFunctions=[setq(0,listinter(%0,%1,%2,%2,%4))][listunion(listdiff(%0,%q0,%2,%2,%4),listdiff(%1,%q0,%2,%2,%4),%2,%3)]
 &MINMAX_NCOND SoftFunctions=2 -1
-&MINMAX_NCONDALL SoftFunctions=2 -1 
-&MINMAX_COND SoftFunctions=2 -1 
+&MINMAX_NCONDALL SoftFunctions=2 -1
+&MINMAX_COND SoftFunctions=2 -1
 &MINMAX_CONDALL SoftFunctions=2 -1
 @@ Old systems -- Use prior to 3.9.5p2
 @@ &FUNPR_FIRSTOF SoftFunctions=[trim(iter(lnum(0,sub(%+,2)),ifelse(!!^setr(0,s(v(%i0))),%q0[ibreak(0)])))][ifelse(!^r(0),s(v(sub(%+,1))))]
@@ -124,6 +124,10 @@
 @@ &FUNPR_GRADIENT SoftFunctions=[setq(9,min(ifelse(lte(%2,0),sub(strlen(%3),1),%2),255))][setq(a,colors(ifelse(neq(2,strlen(%0)),%0,first(colors(0x%0,n))),x))][setq(b,colors(ifelse(neq(2,strlen(%1)),%1,first(colors(0x%1,n))),x))][setq(0,[mid(%qa,1,2)] [mid(%qa,3,2)] [mid(%qa,5,2)])][setq(1,[mid(%qb,1,2)] [mid(%qb,3,2)] [mid(%qb,5,2)])][setq(c,iter(lnum(0,add(1,%q9)),iter(lnum(1,3),printf($02s,tohex(add(0x[extract(%q0,%i0,1)],div(mul(%i1,sub(0x[extract(%q1,%i0,1)],0x[extract(%q0,%i0,1)])),%q9)))),,)))][setq(d,words(%qc))][setq(e,ifelse(eq(1,%4),h))][foreach(#lambda/[lit([ansi(%qe #[extract(%qc,add(1,mod(%1,sub(%qd,1))),1)],switch(asc(%0),37,%<037>,92,%<092>,10,%r,%0))])],edit(%3,%r,mid(%r,1,1)))]
 &MINMAX_GRADIENT SoftFunctions=4 5
 &FUN_ORDINAL SoftFunctions=[spellnum(%0,1)]
+&FUNP_LNUMRANGES SoftFunctions=[iter(%0,case(1,regmatch(%i0,v(regexp.lnumranges), 0 1 2),lnum(%q1,%q2),%i0))]
+&REGEXP.LNUMRANGES SoftFunctions=(-?\d+)-(-?\d+)
+&MINMAX_LNUMRANGES SoftFunctions=1 1
+&FUN_MANSI SoftFunctions=[step(#lambda/[lit([editansi(%1,n,%0)])],%0 %1 %2 %3 %4 %5 %6 %7 %8 %9,2)]
 @fo SoftFunctions=&DB me=num(SoftFunctions)
 @tel SFSideFX=softfunctions
 @startup SoftFunctions=@dolist lattr([v(db)]/fun_*)=@function [after(##,_)]=[v(db)]/##;@dolist lattr([v(db)]/funp_*)=@function/priv/pres [after(##,_)]=[v(db)]/##;@dolist lattr([v(DB)]/funpr_*)=@function/pres [after(##,_)]=[v(DB)]/##;@dolist lattr([v(db)]/funpv_*)=@function/priv [after(##,_)]=[v(DB)]/##;@dolist lattr([v(db)]/funpt_*)=@function/priv/notrace [after(##,_)]=[v(db)]/##;@wait 10={@dolist lattr([v(db)]/funflag_*)=@admin function_access=[after(##,_)] [get([v(db)]/##)]};@wait 10=@dolist lattr([v(db)]/minmax_*)={@function/min [after(##,_)]=[first(get([v(db)]/##))];@function/max [after(##,_)]=[rest(get([v(db)]/##))]}
