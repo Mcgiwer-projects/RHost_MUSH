@@ -48,6 +48,20 @@
 #define SPLIT_FG		0x20
 #define SPLIT_BG		0x40
 
+typedef struct atrcache {
+        char	*name;		/* Cache name */
+	char	*s_cache;	/* Holder of the cached data */
+	char	*s_cachebuild;	/* Code that is executed to cache data */
+	time_t	i_interval;	/* interval (in seconds) to re-run s_cachebuild */
+	time_t	i_lastrun;	/* time it was last checked against */
+	dbref	owner;		/* Owner of the cache (who's allowed to make changes) */
+	int	enabled;	/* Is cache initialized and enabled */
+	int	visible;	/* Is cache executable/visible to everyone? */
+	int	lock;		/* Is cache only executable by owner/controller? */
+	int	commandtrig;	/* Check if new command then force recache -- if interval is '0' command refresh */
+        struct atrcache *next;	/* Next item in list */
+} ATRCACHE;
+
 typedef struct ansisplit {
 	char	s_fghex[5];	/* Hex representation - foreground */
 	char	s_bghex[5];	/* Hex representation - background */
@@ -55,8 +69,8 @@ typedef struct ansisplit {
 	char	c_bgansi;	/* Normal background ansi */
 	int	i_special;	/* Special ansi characters */
 	char	c_accent;	/* Various accent characters */
-        int	i_ascii8;	/* ASCII-8 encoding */
-    int i_utf8; /* UTF-8 encoding */
+	int	i_ascii8;	/* ASCII-8 encoding */
+	int 	i_utf8; 	/* UTF-8 encoding */
 } ANSISPLIT;
 
 typedef struct atrp {
@@ -125,7 +139,7 @@ extern void	FDECL(areg_add, (char *, dbref));
 extern int	FDECL(areg_del_player, (dbref));
 
 /* From cque.c */
-extern void     FDECL(show_que_func, (dbref, char *, int, char, char *, char *[], char));
+extern void     FDECL(show_que_func, (dbref, char *, int, char, char *, char *[], char, int));
 
 extern int	FDECL(nfy_que, (dbref, int, int, int));
 extern int	FDECL(halt_que, (dbref, dbref));
@@ -141,7 +155,7 @@ extern void	NDECL(recover_queue_deposits);
 extern void	NDECL(tcache_init);
 extern char *	FDECL(parse_to, (char **, char, int));
 extern char *	FDECL(parse_arglist, (dbref, dbref, dbref, char *, char, int,
-			char *[], int, char*[], int, int, char *[], int));
+			char *[], int, char*[], int, int, char *[], int, char *));
 extern int	FDECL(get_gender, (dbref));
 #ifdef ZENTY_ANSI
 extern void     FDECL(parse_ansi, (char *, char *, char **, char *, char **, char*, char **));
@@ -250,6 +264,7 @@ extern void	FDECL(log_perror, (const char *, const char *,const char *,
 			const char *));
 extern void	FDECL(log_text, (char *));
 extern void	FDECL(log_number, (int));
+extern void	FDECL(log_unsigned, (int));
 extern void	FDECL(log_name, (dbref));
 extern void	FDECL(log_name_and_loc, (dbref));
 extern char *	FDECL(OBJTYP, (dbref));
@@ -308,6 +323,9 @@ extern int FDECL(objecttag_add, (char*, dbref, int, int));
 extern dbref FDECL(objecttag_get, (char*, dbref, int));
 extern int FDECL(objecttag_remove, (char*));
 extern void     FDECL(decompile_tags, (dbref, dbref, char *, char *, int));
+extern int FDECL(obj_bitlevel, (dbref));
+extern int FDECL(obj_nomodlevel, (dbref));
+extern int FDECL(obj_noexlevel, (dbref));
 
 /* From player.c */
 extern void	FDECL(record_login, (dbref, int, char *, char *,int *, int *, int *));
@@ -381,7 +399,7 @@ extern int	FDECL(exit_visible, (dbref, dbref, int));
 extern int	FDECL(exit_displayable, (dbref, dbref, int));
 extern void	FDECL(did_it, (dbref, dbref, int, const char *, int,
 			const char *, int, char *[], int));
-extern void	FDECL(list_bufstats, (dbref));
+extern void	FDECL(list_bufstats, (dbref, char *));
 extern void	FDECL(list_buftrace, (dbref, int));
 
 /* From set.c */
@@ -607,6 +625,23 @@ extern int      FDECL(mush_crypt_validate, (dbref, const char *, const char *, i
 #define	ATTRIB_ACCESS	0x00000001	/* Change access to attribute */
 #define	ATTRIB_RENAME	0x00000002	/* Rename attribute */
 #define	ATTRIB_DELETE	0x00000004	/* Delete attribute */
+#define ATTRIB_CACHELD  0x00000008	/* Load attribute cache */
+#define ATTRIB_CACHESH  0x00000010	/* Show attribute cache */
+
+#define ATRCACHE_INIT	0x00000001	/* initialize cache by slot */
+#define ATRCACHE_NAME	0x00000002	/* Rename cache by name (or slot) */
+#define ATRCACHE_DELETE	0x00000004	/* Remove a cache by name (or slot) */
+#define ATRCACHE_FETCH	0x00000008	/* Fetch the value of the cache */
+#define ATRCACHE_IVAL	0x00000010	/* Change interval of checking for specific name or slot */
+#define ATRCACHE_CACHE	0x00000020	/* Force a cache update on the cache */
+#define ATRCACHE_LIST	0x00000040	/* list all the caches currently in use */
+#define ATRCACHE_INFO	0x00000080	/* Get information on the specific cache */
+#define ATRCACHE_OWNER	0x00000100	/* Change owner of the specific cache */
+#define ATRCACHE_SET    0x00000200	/* Set the cache information */
+#define ATRCACHE_VIS	0x00000400	/* Is the fetch and cache visible to everyone */
+#define ATRCACHE_LOCK	0x00000800	/* Does recaching require owner or control? */
+#define ATRCACHE_NOANSI	0x00001000	/* Don't ansi parenmatch INFO */
+#define ATRCACHE_INUSE	0x00002000	/* Don't ansi parenmatch INFO */
 
 #define	BOOT_QUIET	0x00000001	/* Inhibit boot message to victim */
 #define	BOOT_PORT	0x00000002	/* Boot by port number */
@@ -656,6 +691,7 @@ extern int      FDECL(mush_crypt_validate, (dbref, const char *, const char *, i
 #define DECOMP_TF	0x00000010	/* Stupid /tf compatibility to @decompile for PennMUSH */
 #define DECOMP_NOEXTRA	0x00000020	/* no extra fluff in @decompile/tf */
 #define DECOMP_TAGS	0x00000040	/* Decompile tags */
+#define DECOMP_DB	0x00000080	/* Use DB instead of name */
 
 #define	DBCK_DEFAULT	0x00000001	/* Get default tests too */
 #define	DBCK_REPORT	0x00000002	/* Report info to invoker */
@@ -718,6 +754,7 @@ extern int      FDECL(mush_crypt_validate, (dbref, const char *, const char *, i
 #define EXAM_REGEXP	64	/* Examine by Regexp */
 #define EXAM_CLUSTER    128     /* Examine by Cluster */
 #define EXAM_DISPLAY	256	/* Do  ansified display of examine */
+#define EXAM_SNAPSHOT	512	/* Do a @snapshot image */
 
 #define	FIXDB_OWNER	1	/* Fix OWNER field */
 #define	FIXDB_LOC	2	/* Fix LOCATION field */
@@ -744,6 +781,7 @@ extern int      FDECL(mush_crypt_validate, (dbref, const char *, const char *, i
 #define FLAGDEF_CHAR  	16	/* Redefine the character for the flag */
 #define FLAGDEF_INDEX	32	/* Show the permission index allowed */
 #define FLAGDEF_TYPE	64	/* Define type restrictions */
+#define FLAGDEF_SLOT	128	/* Show slot permissions */
 
 #define	FRC_PREFIX	0	/* #num command */
 #define	FRC_COMMAND	1	/* what=command */
@@ -882,6 +920,11 @@ extern int      FDECL(mush_crypt_validate, (dbref, const char *, const char *, i
 #define NFY_PID		8	/* Notify or Drain based on PID */
 
 #define NEWPASSWORD_DES 2	/* Force @newpassword to use DES */
+
+#define FLAGLEVEL_CLEAR 1 /* Clear FlagLevel setting */
+#define FLAGLEVEL_NOMOD 2 /* FlagLevel NO_MODIFY setting */
+#define FLAGLEVEL_NOEX 4 /* FlagLevel NO_EXAMINE setting */
+
 
 #define	OPEN_LOCATION	0	/* Open exit in my location */
 #define	OPEN_INVENTORY	1	/* Open exit in me */

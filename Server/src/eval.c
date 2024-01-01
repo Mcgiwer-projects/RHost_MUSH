@@ -28,6 +28,7 @@ extern char * parse_ansi_name(dbref, char *);
 extern void fun_ansi(char *, char **, dbref, dbref, dbref, char **, int, char **, int);
 extern void fun_objid(char *, char **, dbref, dbref, dbref, char **, int, char **, int);
 extern void do_regedit(char *, char **, dbref, dbref, dbref, char **, int, char **, int, int);
+extern void do_atrcache_fetch(dbref, char *, char *, char **, char **, int);
 
 /* ---------------------------------------------------------------------------
  * parse_to: Split a line at a character, obeying nesting.  The line is
@@ -333,7 +334,7 @@ char *
 parse_arglist(dbref player, dbref cause, dbref caller, char *dstr, 
               char delim, dbref eval,
 	      char *fargs[], dbref nfargs, char *cargs[],
-	      dbref ncargs, int i_type, char *regargs[], int nregargs)
+	      dbref ncargs, int i_type, char *regargs[], int nregargs, char *s_name)
 {
     char *rstr, *tstr, *mychar, *mycharptr, *s;
     int arg, peval;
@@ -368,10 +369,18 @@ parse_arglist(dbref player, dbref cause, dbref caller, char *dstr,
        peval = peval | EV_EVAL | ~EV_STRIP_ESC;
     }
     while ((arg < nfargs) && rstr) {
-	if (arg < (nfargs - 1))
+	if (arg < (nfargs - 1)) {
 	    tstr = parse_to(&rstr, ',', peval);
-	else
+	} else {
 	    tstr = parse_to(&rstr, '\0', peval);
+            if ( (nfargs >= MAX_ARGS) && tstr && (strchr(tstr, ',') != NULL) ) {
+               if ( s_name ) {
+                  notify_quiet(player, unsafe_tprintf("Warning: Argument list for '%s' exceeds MAX ARGS (%d)", s_name, nfargs));
+               } else {
+                  notify_quiet(player, unsafe_tprintf("Warning: Argument list exceeds MAX ARGS (%d)", nfargs));
+               }
+            }
+        }
 	if (eval & EV_EVAL) {
             mudstate.trace_indent++;
 	    fargs[arg] = cpuexec(player, cause, caller, eval | EV_FCHECK, tstr,
@@ -909,7 +918,7 @@ void parse_ansi(char *string, char *buff, char **bufptr, char *buff2, char **buf
                 safe_chr(*string, buff_utf, &bufc_utf);
             } else if ( *string == '<' ) {
                 string++;
-                if ( (*string == 'u') && 
+                if ( (ToLower(*string) == 'u') && 
                      (((strlen(string)) > 5 && (*(string+5) == '>')) 
                        || ((strlen(string) > 6) && (*(string+6) == '>')) 
                        || ((strlen(string) > 7) && (*(string+7) == '>')))) {
@@ -1367,9 +1376,9 @@ mushexec(dbref player, dbref cause, dbref caller, int eval, char *dstr,
 
     char *fargs[NFARGS], *sub_txt, *sub_buf, *sub_txt2, *sub_buf2, *orig_dstr, sub_char;
     char *buff, *bufc, *tstr, *tbuf, *tbufc, *savepos, *atr_gotten, *savestr, *s_label;
-    char savec, ch, *ptsavereg, *savereg[MAX_GLOBAL_REGS], *t_bufa, *t_bufb, *t_bufc, c_last_chr,
-         *nptsavereg, *saveregname[MAX_GLOBAL_REGS], c_allargs;
-    char *trace_array[3], *trace_buff, *trace_buffptr;
+    char savec, ch, *ptsavereg, *savereg[MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST], *t_bufa, *t_bufb, *t_bufc, c_last_chr,
+         *nptsavereg, *saveregname[MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST], c_allargs;
+    char *trace_array[3], *trace_buff, *trace_buffptr, *s_nameptr;
     static char tfunbuff[33], tfunlocal[100];
     dbref aowner, twhere, sub_aowner;
     int at_space, nfargs, gender, i, j, alldone, aflags, feval, sub_aflags, i_start, i_type, inum_val, i_last_chr;
@@ -1898,6 +1907,15 @@ mushexec(dbref player, dbref cause, dbref caller, int eval, char *dstr,
                       safe_str(mudstate.curr_plrcmd, buff, &bufc);
                    }
                    dstr++;
+                /* Do cache value here -- atrcache value goodness */
+                } else if ( (*(dstr+1) == 'h') && (*(dstr+2) == '<') && (strchr(dstr+2, '>') != NULL) ) {
+                   atr_gotten = tbang_tmp = alloc_lbuf("atrcache_subs");
+                   dstr+=3;
+                   while ( dstr && (*dstr != '>') ) {
+                      safe_chr(*dstr++, tbang_tmp, &atr_gotten);
+                   }
+                   do_atrcache_fetch(player, tbang_tmp, buff, &bufc, cargs, ncargs);
+                   free_lbuf(tbang_tmp);
                 /* Do the bangs if there */
                 } else if ( isdigit((unsigned char)*(dstr+1)) ) {
                    if ( isdigit((unsigned char)*(dstr+2)) ) {
@@ -2009,7 +2027,8 @@ mushexec(dbref player, dbref cause, dbref caller, int eval, char *dstr,
                    } else {
 #ifdef EXPANDED_QREGS
                       if ( *t_bufa && !*(t_bufa+1) && isalnum(*t_bufa) ) {
-                         for ( w = 0; w < 37; w++ ) {
+                         /* We can only check the first MAX_GLOBAL_REGS letters/numbers */
+                         for ( w = 0; w < MAX_GLOBAL_REGS; w++ ) {
                             if ( mudstate.nameofqreg[w] == tolower(*t_bufa) )
                                break;
                          }
@@ -2050,7 +2069,7 @@ mushexec(dbref player, dbref cause, dbref caller, int eval, char *dstr,
                          }
 #endif
                       } else {
-                         for ( sub_cntr = 0 ; sub_cntr < MAX_GLOBAL_REGS; sub_cntr++ ) {
+                         for ( sub_cntr = 0 ; sub_cntr < (MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST); sub_cntr++ ) {
                             if (  mudstate.global_regsname[sub_cntr] &&
                                   !stricmp(mudstate.global_regsname[sub_cntr], t_bufa) ) {
 #ifdef BANGS
@@ -2076,7 +2095,8 @@ mushexec(dbref player, dbref cause, dbref caller, int eval, char *dstr,
 		   i = (*dstr - '0');
 #ifdef EXPANDED_QREGS
                    if ( *dstr && isalpha((int)*dstr) ) {
-                      for ( w = 0; w < 37; w++ ) {
+                      /* We can only check the first MAX_GLOBAL_REGS letters/numbers */
+                      for ( w = 0; w < MAX_GLOBAL_REGS; w++ ) {
                          if ( mudstate.nameofqreg[w] == tolower(*dstr) )
                             break;
                       }
@@ -3013,9 +3033,17 @@ mushexec(dbref player, dbref cause, dbref caller, int eval, char *dstr,
                  (ulfp && (ulfp->perms2 & CA_NO_PARSE)) ) {
                 i_type |= 2;
             }
+            s_nameptr = NULL;
+            if ( fp ) {
+               s_nameptr = (char *)fp->name;
+            } else if ( ufp ) {
+               s_nameptr = (char *)ufp->name;
+            } else if ( ulfp ) {
+               s_nameptr = (char *)ulfp->name;
+            }
 	    dstr = parse_arglist(player, cause, caller, dstr + 1,
 				 ')', feval, fargs, nfargs,
-				 cargs, ncargs, i_type, regargs, nregargs);
+				 cargs, ncargs, i_type, regargs, nregargs, s_nameptr);
 	    /* If no closing delim, just insert the '(' and
 	     * continue normally */
 
@@ -3129,7 +3157,7 @@ mushexec(dbref player, dbref cause, dbref caller, int eval, char *dstr,
 		    mudstate.ufunc_nest_lev++;
 		    mudstate.func_invk_ctr++;
                     if ( ufp->flags & FN_PRES ) {
-                       for (z = 0; z < MAX_GLOBAL_REGS; z++) {
+                       for (z = 0; z < (MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST); z++) {
                           savereg[z] = alloc_lbuf("ulocal_reg");
                           saveregname[z] = alloc_sbuf("ulocal_regname");
                           ptsavereg = savereg[z];
@@ -3156,7 +3184,7 @@ mushexec(dbref player, dbref cause, dbref caller, int eval, char *dstr,
                     }
 		    mudstate.allowbypass = 0;
                     if ( ufp->flags & FN_PRES ) {
-                       for (z = 0; z < MAX_GLOBAL_REGS; z++) {
+                       for (z = 0; z < (MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST); z++) {
                           ptsavereg = mudstate.global_regs[z];
                           nptsavereg = mudstate.global_regsname[z];
                           safe_str(savereg[z],mudstate.global_regs[z],&ptsavereg);

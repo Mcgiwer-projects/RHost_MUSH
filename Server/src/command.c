@@ -56,6 +56,8 @@ extern void fun_crc32obj(char *, char **, dbref, dbref, dbref, char **, int, cha
 
 extern double FDECL(time_ng, (double*));
 extern void FDECL(populate_tor_seed, (void));
+extern void FDECL(reset_atrcache_commandtrig, (void));
+
 
 #ifdef CACHE_OBJS
 #define CACHING "object"
@@ -201,6 +203,26 @@ NAMETAB attrib_sw[] =
     {(char *) "access", 1, CA_GOD | CA_IMMORTAL | CA_WIZARD, 0, ATTRIB_ACCESS},
     {(char *) "delete", 1, CA_GOD | CA_IMMORTAL | CA_WIZARD, 0, ATTRIB_DELETE},
     {(char *) "rename", 1, CA_GOD | CA_IMMORTAL | CA_WIZARD, 0, ATTRIB_RENAME},
+    {(char *) "loadcache", 2, CA_GOD | CA_IMMORTAL | CA_WIZARD, 0, ATTRIB_CACHELD},
+    {(char *) "showcache", 2, CA_GOD | CA_IMMORTAL | CA_WIZARD, 0, ATTRIB_CACHESH},
+    {NULL, 0, 0, 0, 0}};
+
+NAMETAB atrcache_sw[] =
+{
+    {(char *) "init", 3, CA_GOD | CA_IMMORTAL | CA_WIZARD, 0, ATRCACHE_INIT},
+    {(char *) "delete", 2, CA_GOD | CA_IMMORTAL | CA_WIZARD, 0, ATRCACHE_DELETE},
+    {(char *) "name", 2, CA_GOD | CA_IMMORTAL | CA_WIZARD, 0, ATRCACHE_NAME},
+    {(char *) "owner", 2, CA_GOD | CA_IMMORTAL | CA_WIZARD, 0, ATRCACHE_OWNER},
+    {(char *) "visible", 3, CA_GOD | CA_IMMORTAL | CA_WIZARD, 0, ATRCACHE_VIS},
+    {(char *) "lock", 3, CA_GOD | CA_IMMORTAL | CA_WIZARD, 0, ATRCACHE_LOCK},
+    {(char *) "fetch", 2, CA_PUBLIC, 0, ATRCACHE_FETCH},
+    {(char *) "interval", 3, CA_PUBLIC, 0, ATRCACHE_IVAL},
+    {(char *) "cache", 2, CA_PUBLIC, 0, ATRCACHE_CACHE},
+    {(char *) "list", 2, CA_PUBLIC, 0, ATRCACHE_LIST},
+    {(char *) "info", 3, CA_PUBLIC, 0, ATRCACHE_INFO},
+    {(char *) "set", 3, CA_PUBLIC, 0, ATRCACHE_SET},
+    {(char *) "noansi", 3, CA_PUBLIC, 0, ATRCACHE_NOANSI | SW_MULTIPLE},
+    {(char *) "inuse", 3, CA_PUBLIC, 0, ATRCACHE_INUSE},
     {NULL, 0, 0, 0, 0}};
 
 NAMETAB blacklist_sw[] =
@@ -320,6 +342,7 @@ NAMETAB decomp_sw[] =
     {(char *) "tf", 2, CA_PUBLIC, 0, DECOMP_TF | SW_MULTIPLE},
     {(char *) "noextra", 2, CA_PUBLIC, 0, DECOMP_NOEXTRA | SW_MULTIPLE},
     {(char *) "tags", 2, CA_PUBLIC, 0, DECOMP_TAGS | SW_MULTIPLE},
+    {(char *) "db", 2, CA_PUBLIC, 0, DECOMP_DB | SW_MULTIPLE},
     {NULL, 0, 0, 0, 0}};
    
 NAMETAB dbclean_sw[] =
@@ -433,6 +456,7 @@ NAMETAB examine_sw[] =
     {(char *) "regexp", 1, CA_PUBLIC, 0, EXAM_REGEXP | SW_MULTIPLE},
     {(char *) "cluster", 1, CA_PUBLIC, 0, EXAM_CLUSTER},
     {(char *) "display", 1, CA_PUBLIC, 0, EXAM_DISPLAY | SW_MULTIPLE},
+    {(char *) "snapshot", 1, CA_PUBLIC, 0, EXAM_SNAPSHOT},
     {NULL, 0, 0, 0, 0}};
 
 NAMETAB extansi_sw[] =
@@ -475,6 +499,7 @@ NAMETAB flagdef_sw[] =
     {(char *) "letter", 2, CA_IMMORTAL, 0, FLAGDEF_CHAR},
     {(char *) "index", 2, CA_IMMORTAL, 0, FLAGDEF_INDEX},
     {(char *) "type", 2, CA_IMMORTAL, 0, FLAGDEF_TYPE},
+    {(char *) "slot", 2, CA_IMMORTAL, 0, FLAGDEF_SLOT},
     {NULL, 0, 0, 0, 0}};
 
 NAMETAB force_sw[] =
@@ -706,7 +731,7 @@ NAMETAB mail_sw[] =
     {(char *) "number", 2, CA_PUBLIC, 0, M_NUMBER},
     {(char *) "check", 2, CA_PUBLIC, 0, M_CHECK},
     {(char *) "unmark", 3, CA_PUBLIC, 0, M_UNMARK},
-    {(char *) "quick", 3, CA_PUBLIC, 0, M_QUICK},
+    {(char *) "quick", 3, CA_PUBLIC, 0, M_QUICK | SW_MULTIPLE},
     {(char *) "share", 2, CA_PUBLIC, 0, M_SHARE},
     {(char *) "password", 3, CA_PUBLIC, 0, M_PASS},
     {(char *) "page", 3, CA_PUBLIC, 0, M_PAGE},
@@ -878,6 +903,13 @@ NAMETAB open_sw[] =
 NAMETAB newpassword_sw[] =
 {
     {(char *) "des", 1, CA_WIZARD, 0, NEWPASSWORD_DES},
+    {NULL, 0, 0, 0, 0}};
+
+NAMETAB flaglevel_sw[] =
+{
+    {(char *) "clear", 1, CA_WIZARD, 0, FLAGLEVEL_CLEAR | SW_MULTIPLE},
+    {(char *) "nomod", 1, CA_WIZARD, 0, FLAGLEVEL_NOMOD},
+    {(char *) "noex", 1, CA_WIZARD, 0, FLAGLEVEL_NOEX},
     {NULL, 0, 0, 0, 0}};
 
 NAMETAB password_sw[] =
@@ -1108,12 +1140,12 @@ NAMETAB snapshot_sw[] =
   {(char *) "verify", 2, CA_IMMORTAL, 0, SNAPSHOT_VERIFY},
   {(char *) "unall", 3, CA_IMMORTAL, 0, SNAPSHOT_UNALL},
   {(char *) "overwrite", 2, CA_IMMORTAL, 0, SNAPSHOT_OVER | SW_MULTIPLE},
+  {(char *) "attributes", 2, CA_IMMORTAL, 0, SNAPSHOT_ATTRS | SW_MULTIPLE},
 /* -- this isn't fully baked yet and I'm lazy
   {(char *) "powers", 2, CA_IMMORTAL, 0, SNAPSHOT_POWER | SW_MULTIPLE},
   {(char *) "depowers", 3, CA_IMMORTAL, 0, SNAPSHOT_DPOWER | SW_MULTIPLE},
   {(char *) "flags", 2, CA_IMMORTAL, 0, SNAPSHOT_FLAGS | SW_MULTIPLE},
   {(char *) "toggles", 2, CA_IMMORTAL, 0, SNAPSHOT_TOGGL | SW_MULTIPLE},
-  {(char *) "attributes", 2, CA_IMMORTAL, 0, SNAPSHOT_ATTRS | SW_MULTIPLE},
   {(char *) "other", 2, CA_IMMORTAL, 0, SNAPSHOT_OTHER | SW_MULTIPLE},
 */
   {NULL, 0, 0, 0, 0}};
@@ -1324,6 +1356,8 @@ CMDENT command_table[] =
      0, CS_TWO_ARG | CS_CMDARG | CS_NOINTERP | CS_STRIP_AROUND, 0, do_assert},
     {(char *) "@attribute", attrib_sw, CA_GOD | CA_IMMORTAL | CA_WIZARD, 0,
      0, CS_TWO_ARG | CS_INTERP, 0, do_attribute},
+    {(char *) "@atrcache", atrcache_sw, CA_NO_GUEST | CA_NO_SLAVE, CA_NO_CODE,
+     0, CS_TWO_ARG | CS_INTERP | CS_CMDARG, 0, do_atrcache},
     {(char *) "@blacklist", blacklist_sw, CA_LOCATION | CA_IMMORTAL, 0, 0, CS_ONE_ARG | CS_INTERP, 0, do_blacklist},
     {(char *) "@boot", boot_sw, CA_NO_GUEST | CA_NO_SLAVE | CA_NO_WANDER, 0,
      0, CS_ONE_ARG | CS_INTERP, 0, do_boot},
@@ -1495,6 +1529,8 @@ CMDENT command_table[] =
      0, CS_TWO_ARG | CS_INTERP, 0, do_name},
     {(char *) "@newpassword", newpassword_sw, CA_WIZARD | CA_ADMIN | CA_IMMORTAL, 0,
      PASS_ANY, CS_TWO_ARG, 0, do_newpassword},
+    {(char *) "@flaglevel", flaglevel_sw, CA_GOD | CA_IMMORTAL | CA_WIZARD, 0,
+    0, CS_TWO_ARG | CS_INTERP, 0, do_flaglevel},
     {(char *) "@notify", notify_sw,
      CA_GBL_INTERP | CA_NO_SLAVE | CA_NO_GUEST, CA_NO_CODE,
      0, CS_TWO_ARG, 0, do_notify},
@@ -2262,8 +2298,8 @@ process_hook(dbref player, dbref thing, char *s_uselock, ATTR *hk_ap2, int save_
    dbref thing2;
    int attrib2, aflags_set, i_cpuslam, x, retval, no_hook;
    time_t i_now, i_rollback, i_jump;
-   char *atext, *cputext, *cpulbuf, *savereg[MAX_GLOBAL_REGS], *pt, *result, *cpuslam, *cp, *atextptr,
-        *npt, *saveregname[MAX_GLOBAL_REGS], *s_rollback;
+   char *atext, *cputext, *cpulbuf, *savereg[MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST], *pt, *result, *cpuslam, *cp, *atextptr,
+        *npt, *saveregname[MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST], *s_rollback;
 
    if ( mudstate.no_hook ) {
       return 0;
@@ -2281,7 +2317,7 @@ process_hook(dbref player, dbref thing, char *s_uselock, ATTR *hk_ap2, int save_
       aflags_set = hk_ap2->number;
       if ( atext && !(attrib2 & AF_NOPROG) ) {
          if ( save_flg ) {
-            for (x = 0; x < MAX_GLOBAL_REGS; x++) {
+            for (x = 0; x < (MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST); x++) {
                savereg[x] = alloc_lbuf("ulocal_reg");
                saveregname[x] = alloc_sbuf("ulocal_regname");
                pt = savereg[x];
@@ -2340,7 +2376,7 @@ process_hook(dbref player, dbref thing, char *s_uselock, ATTR *hk_ap2, int save_
          }
          mudstate.password_nochk = 0;
          if ( save_flg ) {
-            for (x = 0; x < MAX_GLOBAL_REGS; x++) {
+            for (x = 0; x < (MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST); x++) {
                pt = mudstate.global_regs[x];
                npt = mudstate.global_regsname[x];
                safe_str(savereg[x],mudstate.global_regs[x],&pt);
@@ -2377,7 +2413,9 @@ process_hook(dbref player, dbref thing, char *s_uselock, ATTR *hk_ap2, int save_
    }
    /* Reset the hook last command and the last player command */
    memset(mudstate.curr_cmd_hook, '\0', LBUF_SIZE);
-   memset(mudstate.curr_plrcmd, '\0', LBUF_SIZE);
+   /* this is not a buffer -- SIGSEGV --  memset(mudstate.curr_plrcmd, '\0', LBUF_SIZE); */
+   mudstate.curr_plrcmd = (char *) "< none >";
+
    return retval;
 }
 
@@ -2458,6 +2496,7 @@ process_cmdent(CMDENT * cmdp, char *switchp, dbref player,
 
     DPUSH; /* #27 */
 
+
     /* This should never happen, but with memory corruption it's possible 
      * Thus, we put a check in to validate both the command and the player
      */
@@ -2501,12 +2540,17 @@ process_cmdent(CMDENT * cmdp, char *switchp, dbref player,
         DPOP; /* #27 */
 	return;
     }
-    key = cmdp->extra & ~SW_MULTIPLE;
-    if (key & SW_GOT_UNIQUE) {
-	i = 1;
-	key = key & ~SW_GOT_UNIQUE;
+    if ( cmdp->cmdtype == CMD_ATTR_e ) {
+       key = cmdp->extra;
+       i = 0;
     } else {
-	i = 0;
+       key = cmdp->extra & ~SW_MULTIPLE;
+       if (key & SW_GOT_UNIQUE) {
+	   i = 1;
+	   key = key & ~SW_GOT_UNIQUE;
+       } else {
+	   i = 0;
+       }
     }
 
     /* Check command switches.  Note that there may be more than one,
@@ -2662,7 +2706,6 @@ process_cmdent(CMDENT * cmdp, char *switchp, dbref player,
 	(*(cmdp->handler)) (player, cause, key);
 	break;
     case CS_ONE_ARG:		/* <cmd> <arg> */
-
 	/* If an unparsed command, just give it to the handler */
 
 	if (cmdp->callseq & CS_UNPARSE) {
@@ -2739,7 +2782,7 @@ process_cmdent(CMDENT * cmdp, char *switchp, dbref player,
 
 	    parse_arglist(player, cause, cause, sparg, '\0',
 			  interp | EV_STRIP_LS | EV_STRIP_TS,
-			  args, MAX_ARG, cargs, ncargs, 0, (char **)NULL, 0);
+			  args, MAX_ARG, cargs, ncargs, 0, (char **)NULL, 0, cmdp->cmdname);
 	    for (nargs = 0; (nargs < MAX_ARG) && args[nargs]; nargs++);
 
 	    /* Call the correct command handler */
@@ -2775,14 +2818,15 @@ process_cmdent(CMDENT * cmdp, char *switchp, dbref player,
 		(*(cmdp->handler)) (player, cause, key,
 				    buf1, buf2, cargs, ncargs);
 	    } else {
-	      if (cmdp->callseq & CS_SEP)
+	      if (cmdp->callseq & CS_SEP) {
 		(*(cmdp->handler)) (player, cause, key, xkey,
 				    buf1, buf2);
-	      else if(cmdp->callseq & CS_PASS_SWITCHES)
+	      } else if(cmdp->callseq & CS_PASS_SWITCHES) {
 		(*(cmdp->handler)) (player, cause, switchp, buf1, buf2);
-	      else 
+	      } else {
 		(*(cmdp->handler)) (player, cause, key,
 				    buf1, buf2);
+              }
 	    }
 
 	    /* Free the buffer, if needed */
@@ -3156,6 +3200,7 @@ process_command(dbref player, dbref cause, int interactive,
     mudstate.start_of_cmds = 0;
     succ = i_fndexit = 0;
     cache_reset(0);
+    reset_atrcache_commandtrig();
     memset(lst_cmd, 0, sizeof(lst_cmd));
     memset(mudstate.last_command, 0, sizeof(mudstate.last_command));
 #ifndef NODEBUGMONITOR
@@ -6371,18 +6416,21 @@ list_options_convtime(dbref player)
 }
 
 static void
-list_options_system(dbref player)
+list_options_system(dbref player, int key)
 {
-   char buf2[64], buf3[64], buf4[64], dbdumptime[25], dbchktime[25], playerchktime[125],
-        newstime[25], mailtime[25], aregtime[25], mushtime[25], *bptr;
-   time_t c_count, d_count, i_count;
+   char buf2[64], buf3[64], buf4[64], buf5[64], dbdumptime[25], dbchktime[25], 
+        playerchktime[125], vattrchktime[25], newstime[25], mailtime[25], aregtime[25], 
+        mushtime[25], *bptr;
+   time_t c_count, d_count, i_count, v_count;
 #ifdef MYSQL_VERSION
    char *tbuf;
 #endif
 
+   memset(vattrchktime, '\0', 25);
    memset(playerchktime, '\0', 125);
 /* "------------------------------------------------------------------" */
    notify(player, "--- System Player Config Parameters ------------------------------------------");
+if ( !key ) {
 #ifdef TINY_SUB
    sprintf(playerchktime, 
            "%cx ------------------------------------------------------------- %s",
@@ -6432,6 +6480,13 @@ list_options_system(dbref player)
     } else {
        notify(player, "elements() compatibility [behaves like elementsmux()] ---------- DISABLED");
     }
+    if ( mudconf.strfunc_softfuncs == 1) {
+       notify(player, "strfunc() enhancement allowing @function but not @lfunction ---- ENABLED");
+    } else if ( mudconf.strfunc_softfuncs == 2) {
+       notify(player, "strfunc() enhancement allowing @function and @lfunction -------- ENABLED");
+    } else {
+       notify(player, "strfunc() enhancement allowing @function or @lfunction --------- DISABLED");
+    }
 #ifdef USE_SIDEEFFECT
     notify(player, "Sideeffects [SIDEFX required] ---------------------------------- ENABLED");
 #else
@@ -6457,6 +6512,14 @@ list_options_system(dbref player)
 #else
     notify(player, "A-Z setq registers --------------------------------------------- DISABLED");
 #endif
+    bptr = alloc_mbuf("list_option_system");
+    if ( MAX_GLOBAL_BOOST > 0 ) {
+       sprintf(bptr, "The default %2d registers have been expanded -------------------- +%d", MAX_GLOBAL_REGS, MAX_GLOBAL_BOOST);
+    } else {
+       sprintf(bptr, "The default %2d registers are not expanded ---------------------- N/A", MAX_GLOBAL_REGS);
+    }
+    notify(player, bptr);
+    free_mbuf(bptr);
 #ifdef ATTR_HACK
     if ( mudconf.hackattr_see == 0 ) {
        notify(player, "Attributes starting with _ and ~ ------------------------------- WIZARD ONLY");
@@ -6528,9 +6591,14 @@ list_options_system(dbref player)
     else
        notify(player, "Name shown before descs when looking at non-owned things ------- DISABLED");
     if ( mudconf.penn_setq )
-       notify(player, "Setq/Setr use PennMUSH compatiability mode --------------------- ENABLED");
+       notify(player, "Setq/Setr registers use PennMUSH compatiability mode ----------- ENABLED");
     else
-       notify(player, "Setq/Setr use PennMUSH compatiability mode --------------------- DISABLED");
+       notify(player, "Setq/Setr registers use PennMUSH compatiability mode ----------- DISABLED");
+    if ( mudconf.setqlabel ) {
+       notify(player, "Registers with labels are enforced to use label to set them ---- ENABLED");
+    } else {
+       notify(player, "Registers with labels are enforced to use label to set them ---- DISABLED");
+    }
     if ( mudconf.format_compatibility )
        notify(player, "Attribute formatting compatibility (&<name>FORMAT) ------------- FORMAT AFTER");
     else
@@ -6626,21 +6694,25 @@ list_options_system(dbref player)
                               SBUF_SIZE, MBUF_SIZE, LBUF_SIZE));
     notify(player, unsafe_tprintf("Maximum attribs per object [VLIMIT] is: %d", mudconf.vlimit));
     notify(player, unsafe_tprintf("Maximum attribs per page of lattr output is: %d", ((LBUF_SIZE - (LBUF_SIZE/20)) / SBUF_SIZE)));
+}
 
     if ( Guildmaster(player) ) {
        c_count = (time_t)floor(mudstate.check_counter);
        d_count = (time_t)floor(mudstate.dump_counter);
        i_count = (time_t)floor(mudstate.idle_counter);
+       v_count = (time_t)floor(mudstate.vattr_counter);
        memset(dbdumptime, '\0', 25);
        memset(dbchktime, '\0', 25);
        strncpy(dbchktime,(char *) ctime(&c_count), 24);
        strncpy(dbdumptime,(char *) ctime(&d_count), 24);
        strncpy(playerchktime,(char *) ctime(&i_count), 24);
+       strncpy(vattrchktime,(char *) ctime(&v_count), 24);
        notify(player, "\r\n--- System Timers and Triggers -----------------------------------------------");
-       notify(player, unsafe_tprintf("--> Next DB Check: %s [%s to trigger]\r\n--> Next DB Dump: %s [%s to trigger]\r\n--> Next Idle User Check: %s [%s to trigger]\r\n",
+       notify(player, unsafe_tprintf("--> Next DB Check: %s [%s to trigger]\r\n--> Next DB Dump: %s [%s to trigger]\r\n--> Next Idle User Check: %s [%s to trigger]\r\n--> Next Vattr Cache Check: %s [%s to trigger]\r\n",
                       dbchktime, cmd_time_format_2(c_count - mudstate.now, buf2),
                       dbdumptime, cmd_time_format_2(d_count - mudstate.now, buf3),
-                      playerchktime, cmd_time_format_2(i_count - mudstate.now, buf4)));
+                      playerchktime, cmd_time_format_2(i_count - mudstate.now, buf4),
+                      vattrchktime, cmd_time_format_2(v_count - mudstate.now, buf5)));
 
        memset(newstime, 0, sizeof(newstime));
        memset(mailtime, 0, sizeof(mailtime));
@@ -6974,9 +7046,10 @@ list_options_config(dbref player)
                mudconf.dump_interval, mudconf.check_interval,
                mudconf.idle_interval, mudconf.rwho_interval);
        notify(player, buff);
-       sprintf(buff, "Timers: Dump...%.1f  Clean...%.1f  Idlecheck...%.1f  Rwho...%.1f",
+       sprintf(buff, "Timers: Dump...%.1f  Clean...%.1f  Idlecheck...%.1f  Rwho...%.1f  Vattrcheck...%.1f",
                mudstate.dump_counter - now, mudstate.check_counter - now,
-               mudstate.idle_counter - now, mudstate.rwho_counter - now);
+               mudstate.idle_counter - now, mudstate.rwho_counter - now,
+               mudstate.vattr_counter);
        notify(player, buff);
        sprintf(buff, "CPU Watchdogs:  CPU...%d%%  Elapsed Time...%d seconds",
              //(mudconf.cpuintervalchk < 10 ? 10 : (mudconf.cpuintervalchk > 100 ? 100 : mudconf.cpuintervalchk)),
@@ -7891,9 +7964,10 @@ list_options(dbref player)
 	    mudconf.dump_interval, mudconf.check_interval,
 	    mudconf.idle_interval, mudconf.rwho_interval);
     notify(player, buff);
-    sprintf(buff, "Timers: Dump...%.1f  Clean...%.1f  Idlecheck...%.1f  Rwho...%.1f",
+    sprintf(buff, "Timers: Dump...%.1f  Clean...%.1f  Idlecheck...%.1f  Rwho...%.1f  Vattrcheck...%.1f",
 	    mudstate.dump_counter - now, mudstate.check_counter - now,
-	    mudstate.idle_counter - now, mudstate.rwho_counter - now);
+	    mudstate.idle_counter - now, mudstate.rwho_counter - now,
+            mudstate.vattr_counter);
     notify(player, buff);
     memset(buff, 0, MBUF_SIZE);
     sprintf(buff, "CPU Watchdogs:  CPU...%d%%  Elapsed Time...%d seconds", 
@@ -8511,7 +8585,7 @@ static void
 list_rlevels(dbref player, int i_key)
 {
     int i, cmp_x, cmp_y, cmp_z;
-    char *tpr_buff, *tprp_buff;
+    char *tpr_buff, *tprp_buff, t_fill[10];
      
     DPUSH; /* #56 */
     cmp_x = sizeof( mudconf.reality_level );
@@ -8520,9 +8594,15 @@ list_rlevels(dbref player, int i_key)
        cmp_z = 0;
     else
        cmp_z = cmp_x / cmp_y;
+    tprp_buff = tpr_buff = alloc_lbuf("list_rlevels");
+    sprintf(tpr_buff, "%-20s %-10s %-32s %s", (char *)"Level", (char *)"Value", (char *)"Desc", (char *)"Adesc Enabled");
     notify(player, unsafe_tprintf("Reality levels: (%d configured)", mudconf.no_levels));
     notify(player, "---------------------------------------"\
                    "---------------------------------------");
+    notify(player, tpr_buff);
+    notify(player, "---------------------------------------"\
+                   "---------------------------------------");
+    free_lbuf(tpr_buff);
 /*  if ( cmp_z != mudconf.no_levels ) { */
     if ( 0 ) {
        notify(player, unsafe_tprintf("Error in reality levels: %d found/%d total.",
@@ -8531,17 +8611,31 @@ list_rlevels(dbref player, int i_key)
        tprp_buff = tpr_buff = alloc_lbuf("list_rlevels");
        if ( i_key ) {
           for(i = 0; (i < mudconf.no_levels) && (i < cmp_z); ++i) {
+              if ( stricmp(mudconf.reality_level[i].attr, (char *)"DESC") == 0 ) {
+                 sprintf(t_fill, "%s", "(AUTO)");
+              } else if ( mudconf.reality_level[i].has_adesc ) {
+                 sprintf(t_fill, "%s", "YES");
+              } else {
+                 t_fill[0] = '\0';
+              }
               tprp_buff = tpr_buff;
-              notify(player, safe_tprintf(tpr_buff, &tprp_buff, "    Level: %-20s Value: %10u   Desc: %s",
+              notify(player, safe_tprintf(tpr_buff, &tprp_buff, "%-20s %10u %-32s %s",
                   mudconf.reality_level[i].name, mudconf.reality_level[i].value,
-                  mudconf.reality_level[i].attr));
+                  mudconf.reality_level[i].attr, t_fill));
           }
        } else {
           for(i = 0; (i < mudconf.no_levels) && (i < cmp_z); ++i) {
+              if ( stricmp(mudconf.reality_level[i].attr, (char *)"DESC") == 0 ) {
+                 sprintf(t_fill, "%s", "(AUTO)");
+              } else if ( mudconf.reality_level[i].has_adesc ) {
+                 sprintf(t_fill, "%s", "YES");
+              } else {
+                 t_fill[0] = '\0';
+              }
               tprp_buff = tpr_buff;
-              notify(player, safe_tprintf(tpr_buff, &tprp_buff, "    Level: %-20s Value: 0x%08x   Desc: %s",
+              notify(player, safe_tprintf(tpr_buff, &tprp_buff, "%-20s 0x%08x %-32s %s",
                   mudconf.reality_level[i].name, mudconf.reality_level[i].value,
-                  mudconf.reality_level[i].attr));
+                  mudconf.reality_level[i].attr, t_fill));
           }
        }
        free_lbuf(tpr_buff);
@@ -8689,15 +8783,7 @@ do_list(dbref player, dbref cause, int extra, char *arg)
     }
     switch (flagvalue) {
        case LIST_ALLOCATOR:
-	   list_bufstats(player);
-           notify(player, unsafe_tprintf("\r\nTotal Lbufs used in Q-Regs: %d", (MAX_GLOBAL_REGS * 2)));
-           notify(player, unsafe_tprintf("Total Sbufs used in Q-Regs: %d", MAX_GLOBAL_REGS));
-#ifndef NODEBUGMONITOR
-           notify(player, unsafe_tprintf("Highest debugmon stack depth was: %d", debugmem->stackval));
-           notify(player, unsafe_tprintf("Current debugmon stack depth is: %d", debugmem->stacktop));
-#else
-	   notify(player, "Debug Monitor is disabled.");
-#endif
+	   list_bufstats(player, s_ptr2);
 	   break;
        case LIST_BUFTRACE:
 	   list_buftrace(player, 0);
@@ -8724,7 +8810,9 @@ do_list(dbref player, dbref cause, int extra, char *arg)
               else if ( (stricmp(s_ptr2, "config") == 0) )
                  list_options_config(player);
               else if ( (stricmp(s_ptr2, "system") == 0) )
-                 list_options_system(player);
+                 list_options_system(player, 0);
+              else if ( (stricmp(s_ptr2, "timers") == 0) )
+                 list_options_system(player, 1);
               else if ( (stricmp(s_ptr2, "convtime") == 0) ) {
                  if ( !(mudconf.enhanced_convtime) )
                     notify(player, "Extended convtime() is not available.");
@@ -8911,8 +8999,9 @@ int flagcheck(char *fname, char *rbuff)
 void do_aflags(dbref player, dbref cause, int key, char *fname, char *args, char *cargs[], int ncargs) 
 {
   char *buff, *s_buff, *t_buff, *s_chkattr, *s_format;
-  int atrnum, aflags, atrcnt, i_page, i_key;
+  int atrnum, aflags, atrcnt, i_page, i_key, i_ap;
   VATTR *vp;
+  ATTR *ap;
   dbref i, aowner;
 
   i_page = i_key = 0;
@@ -8930,7 +9019,20 @@ void do_aflags(dbref player, dbref cause, int key, char *fname, char *args, char
      return;
   }
   if ( key & AFLAGS_SEARCH ) {
-     notify(player, "Invalid switch combination.");
+     if ( fname && *fname ) {
+        i_ap = atoi(fname);
+        ap = atr_num(i_ap);
+        if ( ap ) {
+           s_format = alloc_sbuf("do_aflags");
+           sprintf(s_format, "@aflags: search found attribute '%s' with vattr integer id '%d'.", ap->name, i_ap);
+           notify(player, s_format);
+           free_lbuf(s_format);
+        } else {
+           notify(player, "@aflags: search can not find an attribute with that vattr integer id.");
+        }
+     } else {
+        notify(player, "@aflags: search expects Vattr integer id.");
+     }
      return;
   }
 
@@ -10489,7 +10591,7 @@ void do_skip(dbref player, dbref cause, int key, char *s_boolian, char *args[], 
 void do_sudo(dbref player, dbref cause, int key, char *s_player, char *s_command, char *args[], int nargs)
 {
    dbref target;
-   char *retbuff, *cp, *pt, *savereg[MAX_GLOBAL_REGS], *npt, *saveregname[MAX_GLOBAL_REGS], *s_rollback;
+   char *retbuff, *cp, *pt, *savereg[MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST], *npt, *saveregname[MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST], *s_rollback;
    int old_trainmode, x, i_breakst, forcehalted_state, i_jump, i_rollback, i_chkinline, i_orig;
    time_t i_now;
 
@@ -10526,7 +10628,7 @@ void do_sudo(dbref player, dbref cause, int key, char *s_player, char *s_command
    old_trainmode=mudstate.trainmode;
 
    if ( !(key & SUDO_GLOBAL) || (key & INCLUDE_CLEAR) ) {
-      for (x = 0; x < MAX_GLOBAL_REGS; x++) {
+      for (x = 0; x < (MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST); x++) {
          savereg[x] = alloc_lbuf("ulocal_reg");
          saveregname[x] = alloc_sbuf("ulocal_regname");
          pt = savereg[x];
@@ -10586,7 +10688,7 @@ void do_sudo(dbref player, dbref cause, int key, char *s_player, char *s_command
    strcpy(mudstate.rollback, s_rollback);
    free_lbuf(s_rollback); 
    if ( !(key & SUDO_GLOBAL) || (key & SUDO_CLEAR) ) {
-      for (x = 0; x < MAX_GLOBAL_REGS; x++) {
+      for (x = 0; x < (MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST); x++) {
          pt = mudstate.global_regs[x];
          npt = mudstate.global_regsname[x];
          safe_str(savereg[x],mudstate.global_regs[x],&pt);
@@ -11190,7 +11292,7 @@ void do_hook(dbref player, dbref cause, int key, char *name)
                                  "N %-30.30s | %s", "(']' hook on 'no parsing')", s_ptrbuff));
                else if ( strcmp(cmdp->cmdname, "Z") == 0 ) 
                   notify(player, safe_tprintf(tpr_buff, &tprp_buff, 
-                                 "N %-30.30s | %s", "('}' hook on 'no parsing (nospace)')", s_ptrbuff));
+                                 "Z %-30.30s | %s", "('}' hook on 'no parsing(spc)')", s_ptrbuff));
                else 
                   notify(player, safe_tprintf(tpr_buff, &tprp_buff, 
                                  "%-32.32s | %s", cmdp->cmdname, s_ptrbuff));
@@ -11971,7 +12073,7 @@ void do_cluster(dbref player, dbref cause, int key, char *name, char *args[], in
             } else {
                parse_arglist(player, cause, cause, s_tmpptr, '\0',
                              EV_STRIP_LS | EV_STRIP_TS,
-                             xargs, MAX_ARG, (char **)NULL, 0, 0, (char **)NULL, 0);
+                             xargs, MAX_ARG, (char **)NULL, 0, 0, (char **)NULL, 0, (char *)"@cluster");
                for (nxargs = 0; (nxargs < MAX_ARG) && xargs[nxargs]; nxargs++);
                if ( (nxargs > 1) && xargs[0] && *xargs[0] ) {
                   s_text = atr_get(thing, attr->number, &aowner, &aflags);
@@ -12037,7 +12139,7 @@ void do_cluster(dbref player, dbref cause, int key, char *name, char *args[], in
                } else {
                   parse_arglist(player, cause, cause, s_tmpptr, '\0',
                                 EV_STRIP_LS | EV_STRIP_TS,
-                                xargs, MAX_ARG, (char **)NULL, 0, 0, (char **)NULL, 0);
+                                xargs, MAX_ARG, (char **)NULL, 0, 0, (char **)NULL, 0, (char *)"@cluster");
                   for (nxargs = 0; (nxargs < MAX_ARG) && xargs[nxargs]; nxargs++);
                   if ( (nxargs > 1) && xargs[0] && *xargs[0] ) {
                      s_instr = atr_get(thing, anum2, &aowner, &aflags);
@@ -12165,7 +12267,7 @@ void do_cluster(dbref player, dbref cause, int key, char *name, char *args[], in
                         if ( *s_strtok ) {
 	                   parse_arglist(player, cause, cause, s_tmpptr, '\0',
 			                 EV_STRIP_LS | EV_STRIP_TS,
-			                 xargs, MAX_ARG, (char **)NULL, 0, 0, (char **)NULL, 0);
+			                 xargs, MAX_ARG, (char **)NULL, 0, 0, (char **)NULL, 0, (char *)"@cluster");
 	                   for (nxargs = 0; (nxargs < MAX_ARG) && xargs[nxargs]; nxargs++)
                               ; /* We just want to increment the counter to count it */
                            s_strtok = alloc_lbuf("cluster_trigger_build");
@@ -12235,7 +12337,7 @@ void do_cluster(dbref player, dbref cause, int key, char *name, char *args[], in
                                 (strchr(s_strtokptr, '?') != NULL) ) {
 	                      parse_arglist(player, cause, cause, s_tmpptr, '\0',
 			                    EV_STRIP_LS | EV_STRIP_TS,
-			                    xargs, MAX_ARG, (char **)NULL, 0, 0, (char **)NULL, 0);
+			                    xargs, MAX_ARG, (char **)NULL, 0, 0, (char **)NULL, 0, (char *)"@cluster");
 	                      for (nxargs = 0; (nxargs < MAX_ARG) && xargs[nxargs]; nxargs++)
                                  ; /* We just want to count the variable */
                               if ( (nxargs > 1) && xargs[0] && *xargs[0] ) {
@@ -12268,7 +12370,7 @@ void do_cluster(dbref player, dbref cause, int key, char *name, char *args[], in
                               } else {
 	                         parse_arglist(player, cause, cause, s_tmpptr, '\0',
 			                       EV_STRIP_LS | EV_STRIP_TS,
-			                       xargs, MAX_ARG, (char **)NULL, 0, 0, (char **)NULL, 0);
+			                       xargs, MAX_ARG, (char **)NULL, 0, 0, (char **)NULL, 0, (char *)"@cluster");
 	                         for (nxargs = 0; (nxargs < MAX_ARG) && xargs[nxargs]; nxargs++)
                                     ; /* We just want to count the variable */
                                  if ( (nxargs > 1) && xargs[0] && *xargs[0] ) {
@@ -14623,4 +14725,111 @@ do_crc32obj(dbref player, dbref cause, int key, char *s_name, char *s_passwd)
    free_lbuf(s_array[1]);
    free_lbuf(s_array[2]);
    free_lbuf(s_array[3]);
+}
+
+void do_flaglevel(dbref player, dbref cause, int key, char *object, char *arg)
+{
+    dbref thing;
+    char *buff;
+    int flagsw=0, nomodval=0, noexval=0;
+
+    /* find thing */
+    if ((thing = match_controlled(player, object)) == NOTHING)
+        return;
+
+    if(!Good_chk(thing))
+        return;
+
+    if(key & FLAGLEVEL_NOMOD)
+        flagsw=1;
+    else if(key & FLAGLEVEL_NOEX)
+        flagsw=2;
+
+    nomodval = obj_nomodlevel(thing);
+    noexval = obj_noexlevel(thing);
+
+    if (!arg || !*arg)
+    {
+				if(key & FLAGLEVEL_CLEAR)
+				{
+						if(flagsw)
+						{
+                buff = alloc_sbuf("Flaglevel.level");
+                if(flagsw == 1)
+                {
+                    nomodval=-1;
+                    if((nomodval + noexval) == -2)
+                        atr_clr(thing,A_FLAGLEVEL);
+                    else
+                    {
+                        sprintf(buff, "%d %d", nomodval, noexval); 
+                        atr_add_raw(thing, A_FLAGLEVEL, buff); 
+                    }
+                    notify(player,unsafe_tprintf("NoModify level has been cleared from %s.",Name(thing)));
+                }
+                else
+                {
+                    noexval=-1;
+                    if((nomodval + noexval) == -2)
+                        atr_clr(thing,A_FLAGLEVEL);
+                    else
+                    {
+                        sprintf(buff, "%d %d", nomodval, noexval); 
+                        atr_add_raw(thing, A_FLAGLEVEL, buff); 
+                    }
+                    notify(player,unsafe_tprintf("NoExamine level has been cleared from %s.",Name(thing)));
+                }
+                free_sbuf(buff);
+						}
+						else
+						{
+								atr_clr(thing,A_FLAGLEVEL);
+								notify(player,unsafe_tprintf("Flag-Levels of %s cleared.",Name(thing)));
+						}
+            return;
+				}
+        else
+        {
+            notify(player,unsafe_tprintf("%s NoMod level: %d", Name(thing), nomodval));
+            notify(player,unsafe_tprintf("%s NoExamine level: %d", Name(thing), noexval));
+						return;
+        }
+    }
+    else if(key & FLAGLEVEL_CLEAR)
+    {
+        notify_quiet(player,"@flaglevel/clear accepts no level argument");
+        return;
+    }
+    else if(!key) 
+    {
+        notify_quiet(player,"Please specify either the /nomod or /noex switch.");
+        return;
+    }
+    else if(!is_number(arg))
+    {
+        notify_quiet(player, "Please specify a Flag-Level between 2 (Guildmaster) and 5 (Royalty)!");
+        return;
+    }
+    else if((atoi(arg) < 1) || (atoi(arg) > 5))
+    {
+        notify_quiet(player, "Please specify a Flag-Level between 2 (Guildmaster) and 5 (Royalty)!");
+        return;
+    }
+    
+    buff = alloc_sbuf("flaglevel.level");
+    if(flagsw == 1)
+    {
+        nomodval=atoi(arg);
+        sprintf(buff, "%d %d", nomodval, noexval); 
+        atr_add_raw(thing, A_FLAGLEVEL, buff); 
+        notify(player,unsafe_tprintf("NoModify level of %s set to %d",Name(thing),atoi(arg)));
+    }
+    else
+    {
+        noexval=atoi(arg);
+        sprintf(buff, "%d %d", nomodval, noexval); 
+        atr_add_raw(thing, A_FLAGLEVEL, buff); 
+        notify(player,unsafe_tprintf("NoExamine level of %s set to %d",Name(thing),atoi(arg)));
+    }
+    free_sbuf(buff);
 }

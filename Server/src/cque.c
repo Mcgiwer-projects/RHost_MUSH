@@ -25,7 +25,12 @@ extern double NDECL(next_timer);
 extern double FDECL(time_ng, (double*));
 extern int FDECL(alarm_msec, (double));
 
-#define MUMAXPID	32767
+// #define MUMAXPID	32767
+#ifdef DYN_MAXPIDS
+#define MUMAXPID	DYN_MAXPIDS
+#else
+#define MUMAXPID	262136
+#endif
 #ifdef MAXINT
 #define MYMAXINT	MAXINT
 #else
@@ -86,7 +91,7 @@ void execute_entry(BQUE *queue)
 
 		/* Load scratch args */
 
-		for (i = 0; i < MAX_GLOBAL_REGS; i++) {
+		for (i = 0; i < (MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST); i++) {
 		    if (queue->scr[i]) {
 			strcpy(mudstate.global_regs[i],
 			       queue->scr[i]);
@@ -436,13 +441,13 @@ freeze_pid(dbref player, int pid, int key)
                 else
                    freezepid->env[a] = NULL;
             }
-            for (a = 0; a < MAX_GLOBAL_REGS; a++) {
+            for (a = 0; a < (MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST); a++) {
                 if ( point->scr[a] )
                    freezepid->scr[a] = freezepid->text + (point->scr[a] - point->text);
                 else
                    freezepid->scr[a] = NULL;
             }
-            for (a = 0; a < MAX_GLOBAL_REGS; a++) {
+            for (a = 0; a < (MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST); a++) {
                 if ( point->scrname[a] )
                    freezepid->scrname[a] = freezepid->text + (point->scrname[a] - point->text);
                 else
@@ -514,13 +519,13 @@ freeze_pid(dbref player, int pid, int key)
                 else
                    freezepid->env[a] = NULL;
             }
-            for (a = 0; a < MAX_GLOBAL_REGS; a++) {
+            for (a = 0; a < (MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST); a++) {
                 if ( point->scr[a] )
                    freezepid->scr[a] = freezepid->text + (point->scr[a] - point->text);
                 else
                    freezepid->scr[a] = NULL;
             }
-            for (a = 0; a < MAX_GLOBAL_REGS; a++) {
+            for (a = 0; a < (MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST); a++) {
                 if ( point->scrname[a] )
                    freezepid->scrname[a] = freezepid->text + (point->scrname[a] - point->text);
                 else
@@ -643,13 +648,13 @@ thaw_pid(dbref player, int pid, int key)
                    else
                       freezepid->env[a] = NULL;
                }
-               for (a = 0; a < MAX_GLOBAL_REGS; a++) {
+               for (a = 0; a < (MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST); a++) {
                    if ( point->scr[a] )
                       freezepid->scr[a] = freezepid->text + (point->scr[a] - point->text);
                    else
                       freezepid->scr[a] = NULL;
                }
-               for (a = 0; a < MAX_GLOBAL_REGS; a++) {
+               for (a = 0; a < (MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST); a++) {
                    if ( point->scrname[a] )
                       freezepid->scrname[a] = freezepid->text + (point->scrname[a] - point->text);
                    else
@@ -724,13 +729,13 @@ thaw_pid(dbref player, int pid, int key)
                    else
                       freezepid->env[a] = NULL;
                }
-               for (a = 0; a < MAX_GLOBAL_REGS; a++) {
+               for (a = 0; a < (MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST); a++) {
                    if ( point->scr[a] )
                       freezepid->scr[a] = freezepid->text + (point->scr[a] - point->text);
                    else
                       freezepid->scr[a] = NULL;
                }
-               for (a = 0; a < MAX_GLOBAL_REGS; a++) {
+               for (a = 0; a < (MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST); a++) {
                    if ( point->scrname[a] )
                       freezepid->scrname[a] = freezepid->text + (point->scrname[a] - point->text);
                    else
@@ -1685,13 +1690,13 @@ setup_que(dbref player, dbref cause, char *command,
 	    tlen += (strlen(args[a]) + 1);
     }
     if (sargs) {
-	for (a = 0; a < MAX_GLOBAL_REGS; a++) {
+	for (a = 0; a < (MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST); a++) {
 	    if (sargs[a])
 		tlen += (strlen(sargs[a]) + 1);
 	}
     }
     if ( sargsname ) {
-	for (a = 0; a < MAX_GLOBAL_REGS; a++) {
+	for (a = 0; a < (MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST); a++) {
 	    if (sargsname[a])
 		tlen += (strlen(sargsname[a]) + 1);
 	}
@@ -1706,10 +1711,10 @@ setup_que(dbref player, dbref cause, char *command,
     for (a = 0; a < NUM_ENV_VARS; a++) {
 	tmp->env[a] = NULL;
     }
-    for (a = 0; a < MAX_GLOBAL_REGS; a++) {
+    for (a = 0; a < (MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST); a++) {
 	tmp->scr[a] = NULL;
     }
-    for (a = 0; a < MAX_GLOBAL_REGS; a++) {
+    for (a = 0; a < (MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST); a++) {
 	tmp->scrname[a] = NULL;
     }
 
@@ -1731,7 +1736,7 @@ setup_que(dbref player, dbref cause, char *command,
 	}
     }
     if (sargs) {
-	for (a = 0; a < MAX_GLOBAL_REGS; a++) {
+	for (a = 0; a < (MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST); a++) {
 	    if (sargs[a]) {
 		strcpy(tptr, sargs[a]);
 		tmp->scr[a] = tptr;
@@ -1740,7 +1745,7 @@ setup_que(dbref player, dbref cause, char *command,
 	}
     }
     if ( sargsname ) {
-	for (a = 0; a < MAX_GLOBAL_REGS; a++) {
+	for (a = 0; a < (MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST); a++) {
 	    if (sargsname[a]) {
 		strcpy(tptr, sargsname[a]);
 		tmp->scrname[a] = tptr;
@@ -1909,7 +1914,7 @@ do_wait(dbref player, dbref cause, int key, char *eventorig,
              return;
           }
           recpidval = atoi(eventorig);
-          if ( (recpidval < 0) || (recpidval > MAX_GLOBAL_REGS) ) {
+          if ( (recpidval < 0) || (recpidval > (MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST)) ) {
              notify(player, "Invalid register defined with /RECPID switch.");
              return;
           }
@@ -2135,7 +2140,8 @@ NDECL(do_second)
     i_offset = 0;
     d_timediff = (int)mudstate.nowmsec - (int)mudstate.lastnowmsec;
     for (point = mudstate.qwait, trail = NULL; point ; point = next) {
-        if ( (d_timediff > 120) || (d_timediff < -120) ) {
+        /* We'll raise offsets to 5 minutes now before it wigs out */
+        if ( (d_timediff > 300) || (d_timediff < -300) ) {
            point->waittime = point->waittime + d_timediff;
            i_offset = 1;
         } 
@@ -2159,7 +2165,8 @@ NDECL(do_second)
 	    next = (trail = point)->next;
 	    continue;		/* Skip if not timed-wait */
 	}
-        if ( (d_timediff > 120) || (d_timediff < -120) ) {
+        /* We'll raise offsets to 5 minutes now before it wigs out */
+        if ( (d_timediff > 300) || (d_timediff < -300) ) {
            point->waittime = point->waittime + d_timediff;
            i_offset = 1;
         }
@@ -2234,7 +2241,7 @@ do_top(int ncmds)
     for (count = 0; count < ncmds; count++) {
 	if (!test_top()) {
 	    mudstate.debug_cmd = cmdsave;
-	    for (i = 0; i < MAX_GLOBAL_REGS; i++) {
+	    for (i = 0; i < (MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST); i++) {
 		*mudstate.global_regs[i] = '\0';
 		*mudstate.global_regsname[i] = '\0';
    	        *mudstate.global_regs_backup[i] = '\0';
@@ -2252,7 +2259,7 @@ do_top(int ncmds)
         mudstate.curr_cmd = (char *) "";
     }
 
-    for (i = 0; i < MAX_GLOBAL_REGS; i++) {
+    for (i = 0; i < (MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST); i++) {
 	*mudstate.global_regs[i] = '\0';
 	*mudstate.global_regsname[i] = '\0';
   	*mudstate.global_regs_backup[i] = '\0';
@@ -2356,11 +2363,12 @@ fun_do_display(BQUE *tmp, dbref player, dbref player_targ, dbref obj_targ, int k
 }
 
 void
-show_que_func(dbref player, char *target, int key, char s_type, char *buff, char **bufcx, char sep)
+show_que_func(dbref player, char *target, int key, char s_type, char *buff, char **bufcx, char sep, int i_player)
 {
    BQUE *tmp;
    dbref player_targ, obj_targ;
-   int first, i_pid;
+   char *s_tmp;
+   int first, i_pid, i_count;
 
    i_pid = -1;
    if ( target && *target ) {
@@ -2378,11 +2386,17 @@ show_que_func(dbref player, char *target, int key, char s_type, char *buff, char
               !HasPriv(player, obj_targ, POWER_SEE_QUEUE, POWER3, NOTHING))) {
             return;
          }
+         /* flip to check all ownership by player specified */
+         if ( i_player && isPlayer(obj_targ)) {
+            player_targ = obj_targ;
+            obj_targ = NOTHING;
+         }
       }
    } else {
       player_targ = obj_targ = NOTHING;
    }
-   first = 0;
+   first = i_count = 0;
+   /* Player running queue */
    if ( s_type == 'p' ) {
       for ( tmp = mudstate.qfirst; tmp; tmp = tmp->next ) {
          if ( !fun_do_chk(tmp, player, &player_targ, &obj_targ) ) 
@@ -2393,6 +2407,7 @@ show_que_func(dbref player, char *target, int key, char s_type, char *buff, char
          first = 1;
       }
    } 
+   /* Object running queue */
    if ( s_type == 'o' ) {
       for ( tmp = mudstate.qlfirst; tmp; tmp = tmp->next ) {
          if ( !fun_do_chk(tmp, player, &player_targ, &obj_targ) ) 
@@ -2403,25 +2418,41 @@ show_que_func(dbref player, char *target, int key, char s_type, char *buff, char
          first = 1;
       }
    }
-   if ( (s_type == 'q') || (s_type == 'w') ) {
+   /* Wait queue */
+   if ( (s_type == 'q') || (s_type == 'w') || (s_type == 'c') ) {
       for ( tmp = mudstate.qwait; tmp; tmp = tmp->next ) {
          if ( !fun_do_chk(tmp, player, &player_targ, &obj_targ) ) 
             continue;
          if ( (i_pid > 0) && (i_pid != tmp->pid) )
             continue;
-         fun_do_display(tmp, player, player_targ, obj_targ, key, first, buff, bufcx, sep);
+         if ( s_type == 'c' ) {
+            i_count++;
+         } else {
+            fun_do_display(tmp, player, player_targ, obj_targ, key, first, buff, bufcx, sep);
+         }
          first = 1;
       }
    }
-   if ( (s_type == 'q') || (s_type == 's') ) {
+   /* Semaphore queue */
+   if ( (s_type == 'q') || (s_type == 's') || (s_type == 'c') ) {
       for ( tmp = mudstate.qsemfirst; tmp; tmp = tmp->next ) {
          if ( !fun_do_chk(tmp, player, &player_targ, &obj_targ) ) 
             continue;
          if ( (i_pid > 0) && (i_pid != tmp->pid) )
             continue;
-         fun_do_display(tmp, player, player_targ, obj_targ, key, first, buff, bufcx, sep);
+         if ( s_type == 'c' ) {
+            i_count++;
+         } else {
+            fun_do_display(tmp, player, player_targ, obj_targ, key, first, buff, bufcx, sep);
+         }
          first = 1;
       }
+   }
+   if ( s_type == 'c' ) {
+      s_tmp = alloc_sbuf("func_pid_count");
+      sprintf(s_tmp, "%d", i_count);
+      safe_str(s_tmp, buff, bufcx);
+      free_sbuf(s_tmp);
    }
 }
 
@@ -2483,7 +2514,7 @@ show_que(dbref player, int key, BQUE * queue, int *qtot,
                stop_chr = ' ';
 	    if ((tmp->waittime > 0) && (Good_obj(tmp->sem)))
 		notify(player,
-		       safe_tprintf(tpr_buff, &tprp_buff, "(%s: %-5d) %c [#%d/%.*f]%s:%s", sw_type ? "FTIME" : "PID",
+		       safe_tprintf(tpr_buff, &tprp_buff, "(%s: %-6d) %c [#%d/%.*f]%s:%s", sw_type ? "FTIME" : "PID",
                                tmp->pid,
                                stop_chr,
 			       tmp->sem,
@@ -2492,7 +2523,7 @@ show_que(dbref player, int key, BQUE * queue, int *qtot,
 			       bufp, tmp->comm));
 	    else if (tmp->waittime > 0)
 		notify(player,
-		       safe_tprintf(tpr_buff, &tprp_buff, "(%s: %-5d) %c [%.*f]%s:%s", sw_type ? "FTIME" : "PID",
+		       safe_tprintf(tpr_buff, &tprp_buff, "(%s: %-6d) %c [%.*f]%s:%s", sw_type ? "FTIME" : "PID",
                                tmp->pid,
                                stop_chr,
                                mtimerlen,
@@ -2500,12 +2531,12 @@ show_que(dbref player, int key, BQUE * queue, int *qtot,
 			       bufp, tmp->comm));
 	    else if (Good_obj(tmp->sem))
 		notify(player,
-		       safe_tprintf(tpr_buff, &tprp_buff, "(%s: %-5d) %c [#%d]%s:%s", sw_type ? "FTIME" : "PID",
+		       safe_tprintf(tpr_buff, &tprp_buff, "(%s: %-6d) %c [#%d]%s:%s", sw_type ? "FTIME" : "PID",
                                tmp->pid, stop_chr, tmp->sem,
 			       bufp, tmp->comm));
 	    else
 		notify(player,
-		       safe_tprintf(tpr_buff, &tprp_buff, "(%s: %-5d) %c %s:%s", sw_type ? "FTIME" : "PID",
+		       safe_tprintf(tpr_buff, &tprp_buff, "(%s: %-6d) %c %s:%s", sw_type ? "FTIME" : "PID",
                                tmp->pid, stop_chr, bufp, tmp->comm));
 	    bp = bufp;
 	    if (key == PS_LONG) {
@@ -2616,6 +2647,8 @@ do_ps(dbref player, dbref cause, int key, char *target)
 	   sprintf(bufp, "Totals: Player...%d/%d  Object...%d/%d  Wait...%d/%d  Semaphore...%d/%d",
 		   pqent, pqtot, oqent, oqtot, wqent, wqtot, sqent, sqtot);
        notify(player, bufp);
+       sprintf(bufp, "Queue TimerInterval: [%d max pids] %d times a second (1/%d second)", MUMAXPID, mudconf.mtimer, mudconf.mtimer);
+/*
        switch (mudconf.mtimer) {
           case 1: strcpy(bufp, "Queue TimerInterval: every second (1/1 second)");
                   break;
@@ -2628,6 +2661,7 @@ do_ps(dbref player, dbref cause, int key, char *target)
           default: strcpy(bufp, "Queue TimerInterval: Unknown -- Contact staff)");
                   break;
        }
+*/
        notify(player, bufp);
        free_mbuf(bufp);
     } else {

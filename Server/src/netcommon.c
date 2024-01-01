@@ -41,11 +41,16 @@ char *index(const char *, int);
 #include "websock2.h"
 ///// END NEW WEBSOCK
 #endif
+#ifdef ENABLE_LUA
+#include "lua.h"
+#endif
 
 #include "debug.h"
 #define FILENUM NETCOMMON_C
 
 extern int ndescriptors;
+extern int FDECL(alarm_msec, (double));
+
 
 /* Logged out command table definitions */
 
@@ -82,18 +87,6 @@ extern int encode_base64(const char *, int, char *, char **);
 extern int check_tor(struct in_addr, int);
 
 
-/* for aconnect: player = room, target = connecting player */
-/*
-#define CANSEE(player, target) \
-   (!Cloak(target) || Wizard(player)) \
-   && (!(Dark(target) && mudconf.player_dark) 
-   && (!SCloak(target) || Immortal(player))
-*/
-#define CANSEE(player, target) \
-   (!Cloak(target) || Wizard(player)) && \
-   (!(Dark(target) && mudconf.player_dark) || Wizard(player)) && \
-   (!SCloak(target) || Immortal(player))
-    
 #ifdef LOCAL_RWHO_SERVER
 void FDECL(dump_rusers, (DESC * call_by));
 
@@ -598,6 +591,57 @@ strip_returntab(const char *raw, int key)
     }
     *q = '\0';
     RETURN(buf); /* #105 */
+}
+
+/* html handler for API -- cleanup and rewrite */
+void  
+handle_html(DESC *d, int code, char *buf1, char *buf2, char *buf3, char *buf4)
+{
+   char *s_dtime;
+
+   s_dtime = (char *) ctime(&mudstate.now);
+
+   switch(code) {
+      case 200: /* OK */
+         queue_string(d, "HTTP/1.1 200 OK\r\n");
+         break;
+      case 400: /* Bad Request */
+         queue_string(d, "HTTP/1.1 400 Bad Request\r\n");
+         break;
+      case 403: /* Forbidden */
+         queue_string(d, "HTTP/1.1 403 Forbidden\r\n");
+         break;
+      case 404: /* Not Found */
+         queue_string(d, "HTTP/1.1 404 Not Found\r\n");
+         break;
+      case 500: /* Internal Server Error */
+         queue_string(d, "HTTP/1.1 500 Internal Server Error\r\n");
+         break;
+      case 501: /* SSL not enabled */
+       queue_string(d, "HTTP/1.1 501 Not Implemented\r\n");
+         break;
+   }
+
+   /* Standard header */
+   queue_string(d, "Content-type: text/plain\r\n");
+   queue_string(d, unsafe_tprintf("Date: %s", s_dtime));
+
+   /* Additional fields */
+   if ( buf1 && *buf1 ) {
+      queue_string(d, buf1);
+   }
+
+   if ( buf2 && *buf2 ) {
+      queue_string(d, buf2);
+   }
+
+   if ( buf3 && *buf3 ) {
+      queue_string(d, buf3);
+   }
+
+   if ( buf4 && *buf4 ) {
+      queue_string(d, buf4);
+   }
 }
 
 /* --------------------------------------------------
@@ -2111,6 +2155,7 @@ welcome_user(DESC * d)
 	fcache_dump(d, FC_CONN_REG, (char *)NULL);
     else
 	fcache_dump(d, FC_CONN, (char *)NULL);
+
     VOIDRETURN; /* #124 */
 }
 
@@ -2289,7 +2334,7 @@ announce_connect(dbref player, DESC * d, int dc)
     int aflags, num, key, aflags2;
     char *buf, *tbuf, *time_str, *progatr;
     DESC *dtemp;
-    char *argv[1];
+    char *argv[1], *s_pmt, *s_pmtptr;
     int totsucc, totfail, newfail;
 #ifdef ZENTY_ANSI
     char *s_buff, *s_buff2, *s_buff3, *s_buffptr, *s_buff2ptr, *s_buff3ptr;
@@ -2514,6 +2559,15 @@ announce_connect(dbref player, DESC * d, int dc)
 
 
     look_in(player, player, Location(player), (LK_SHOWEXIT | LK_OBEYTERSE));
+    if ( d && Prompt(d->player) ) {
+       progatr = atr_get(d->player, A_PROGPROMPT, &aowner, &aflags);
+       if ( *progatr ) {
+          s_pmt = s_pmtptr = alloc_lbuf("process_ic_command");
+          queue_string(d, safe_tprintf(s_pmt, &s_pmtptr, "%s%s%s \377\371", ANSI_HILITE, progatr, ANSI_NORMAL));
+          free_lbuf(s_pmt);
+       }
+       free_lbuf(progatr);
+    }
     if ( InProgram(player) ) {
        if ( (mudconf.login_to_prog && !(ProgCon(player))) || 
             (!mudconf.login_to_prog && ProgCon(player)) ) {
@@ -2983,11 +3037,20 @@ NDECL(check_idle)
 
     DESC_SAFEITER_ALL(d, dnext) {
 	if (d->flags & DS_CONNECTED) {
+
+
+	#ifdef ENABLE_WEBSOCKETS
+	    /* Websockets don't like these random bytes. They want Unicode. */
+	    if (!(d->flags & DS_WEBSOCKETS)) {
+	#endif
             if ( KeepAlive(d->player) ) {
                /* Send NOP code to players to keep NAT/routers/firewalls happy */
                queue_string(d, "\377\361");
 	       process_output(d);
             }
+	#ifdef ENABLE_WEBSOCKETS
+	    }
+	#endif
             if ( d->last_time > mudstate.now )
 	       idletime = 0;
             else
@@ -3033,9 +3096,12 @@ NDECL(check_idle)
 		queue_string(d, "*** Login Timeout ***\r\n");
                 process_output(d);
 		shutdownsock(d, R_TIMEOUT);
-	    }
-            if ( (idletime > 5) && (d->flags & DS_API) ) {
-		shutdownsock(d, R_API);
+	    } else if ( d->flags & DS_API ) {
+               /* Force API disconnecting after d->timeout from connection */
+               if ( (idletime > (d->timeout)) || (mudstate.now > (d->connected_at + d->timeout)) ) {
+                  process_output(d);
+		  shutdownsock(d, R_API);
+               }
             }
 	}
     }
@@ -5073,25 +5139,34 @@ do_command(DESC * d, char *command)
     char *s_ansi1, *s_ansi2, *s_ansi3, *s_ansi1p, *s_ansi2p, *s_ansi3p;
 #endif
     char *s_usepass, *s_usepassptr,
-         *s_user, *s_snarfing, *s_snarfing2, *s_snarfing3, *s_snarfing4, *s_strtok, *s_strtokr, *s_buffer,
-         *s_get, *s_pass;
+         *s_user, *s_snarfing, *s_snarfing2, *s_snarfing3, *s_snarfing4, *s_snarfheader, *s_snarfvalue, *s_buffer,
+         *s_get, *s_pass, *s_enc64, *s_enc64ptr;
     double i_time;
-    int i_cputog, i_encode64, i_snarfing, i_parse, i_usepass, i_snarfing4;
-    dbref aowner, thing;
+    int i_cputog, i_encode64, i_snarfing, i_enc64, i_parse, i_usepass, i_snarfing4, i_snarfheaders;
+    dbref thing;
     ATTR *atrp;
 #endif
+    dbref aowner;
+    char *s_strtok, *s_strtokr;
+#ifdef ENABLE_LUA
+    char *s_lua, *s_luaptr;
+    int i_lualength;
+    lua_t *lua;
+#endif
     char *arg, *cmdsave, *time_str, *s_rollback, *s_dtime, *addroutbuf, *addrsav,
-         *s_sitetmp, *s_sitebuff;
+         *s_sitetmp, *s_sitebuff, *haproxy_srcip, *haproxy_rest;
     int retval, cval, gotone, store_perm, chk_perm, i_rollback, i_jump,
-        maxsitecon, i_retvar, i_valid, aflags, no_space;
+        maxsitecon, i_retvar, i_valid, aflags, no_space, i_timeout, i_do_proxy;
     struct SNOOPLISTNODE *node;
     struct sockaddr_in p_sock;
     struct in_addr p_addr;
+    struct itimerval itimer;
     DESC *sd, *d2, *dssl, *dsslnext;
     NAMETAB *cp;
 
     DPUSH; /* #147 */
 
+    i_do_proxy = 0;
     time_str = NULL;
     chk_perm = store_perm = 0;
     cmdsave = mudstate.debug_cmd;
@@ -5109,6 +5184,17 @@ do_command(DESC * d, char *command)
     }
     mudstate.breakdolist = 0;
     
+    if ( d && Prompt(d->player) ) {
+       s_rollback = atr_get(d->player, A_PROGPROMPT, &aowner, &aflags);
+       if ( *s_rollback ) {
+          s_strtokr = s_strtok = alloc_lbuf("process_ic_command");
+          queue_string(d, safe_tprintf(s_strtok, &s_strtokr, "%s%s%s \377\371", ANSI_HILITE, s_rollback, ANSI_NORMAL));
+          free_lbuf(s_strtok);
+       }
+       free_lbuf(s_rollback);
+    }
+
+    i_timeout = 1;
     /* snoop on player input -Thorin */
     if (d->snooplist) {
 	for (node = d->snooplist; node; node = node->next) {
@@ -5174,8 +5260,33 @@ do_command(DESC * d, char *command)
        shutdownsock(d, R_BOOT);
        RETURN(0); /* #147 */
     }
-    if ( !d->player && *arg && *command && mudconf.sconnect_reip && *(mudconf.sconnect_cmd) &&
+    /* Support haproxy PROXY as though it were our own */
+    haproxy_rest = 0;
+    if ( !d->player && *arg && *command && mudconf.sconnect_reip &&
+         !strcmp("PROXY", command) ) {
+       strtok_r(arg, " ", &haproxy_rest); /* TCP4 */
+       haproxy_srcip = strtok_r(NULL, " ", &haproxy_rest); /* Source IP */
+       if(haproxy_srcip) {
+           /* Put the source IP in arg to simulate the stunnel command */
+           arg = haproxy_srcip;
+           i_do_proxy = 1;
+           STARTLOG(LOG_ALWAYS, "NET", "PROXY");
+            log_text("Received HAPROXY IP ");
+            log_text(arg);
+           ENDLOG
+       } else {
+           STARTLOG(LOG_ALWAYS, "NET", "PROXY");
+            log_text("HAPROXY attempt without IP");
+           ENDLOG
+           RETURN(0);
+       }
+    }
+    else if ( !d->player && *arg && *command && mudconf.sconnect_reip && *(mudconf.sconnect_cmd) &&
          !strcmp(mudconf.sconnect_cmd, command) ) {
+       i_do_proxy = 1;
+    }
+
+    if ( i_do_proxy ) {
        s_rollback = alloc_lbuf("sconnect_handler");
        addroutbuf = (char *) addrout(d->address.sin_addr, (d->flags & DS_API));
        if ( d->flags & DS_SSL ) {
@@ -5304,7 +5415,7 @@ do_command(DESC * d, char *command)
 
              /* Do suspect site checks -- flag suspect, log, continue on */
              strcpy(s_sitebuff, mudconf.suspect_host);
-             if ( (site_check(p_addr, mudstate.access_list, 1, 0, 0) | 
+             if ( ( (site_check(p_addr, mudstate.access_list, 1, 0, 0) & ~0x0FFFFFFF) | 
                    site_check(p_addr, mudstate.suspect_list, 0, 0, 0)) ||
                   (lookup(s_sitetmp, s_sitebuff, maxsitecon, &i_retvar)) ) {
                 if ( (i_valid == 2) || (i_valid == 4) || (i_valid == 6) ) {
@@ -5458,6 +5569,20 @@ do_command(DESC * d, char *command)
           free_lbuf(s_rollback);
           free_lbuf(s_sitetmp);
           free_mbuf(addrsav);
+
+          if ( haproxy_rest && (d->flags & DS_API) ) {
+             arg = strstr(haproxy_rest, "\r\n");
+             if(arg) {
+                arg += 2; /* Skip the \r\n */
+                do_command(d, arg);
+             } else {
+                arg = strstr(haproxy_rest, "\n");
+                if(arg) {
+                   arg += 1; /* Skip the \n */
+                   do_command(d, arg);
+                }
+             }
+          }
           RETURN(0); /* #147 */
        } else {
 
@@ -5521,10 +5646,7 @@ do_command(DESC * d, char *command)
 
     if ( (d->flags & DS_API) && (cp == NULL) ) {
        s_dtime = (char *) ctime(&mudstate.now);
-       queue_string(d, "HTTP/1.1 400 Bad Request\r\n");
-       queue_string(d, "Content-type: text/plain\r\n");
-       queue_string(d, unsafe_tprintf("Date: %s", s_dtime));
-       queue_string(d, "Exec: Error - Invalid Headers Supplied\r\n");
+       handle_html(d, 400, (char *) "Exec: Error - Invalid Headers Supplied\r\n\r\n", NULL, NULL, NULL);
        process_output(d);
        shutdownsock(d, R_API);
        mudstate.debug_cmd = cmdsave;
@@ -5688,11 +5810,8 @@ do_command(DESC * d, char *command)
             }
             s_dtime = (char *) ctime(&mudstate.now);
 #ifndef HAS_OPENSSL
-            queue_string(d, "HTTP/1.1 200 OK\r\n");
-            queue_string(d, "Content-type: text/plain\r\n");
-            queue_string(d, unsafe_tprintf("Date: %s", s_dtime));
-            queue_string(d, "Exec: Error - SSL not compiled in RhostMUSH\r\n");
-            queue_string(d, "Return: <NULL>\r\n");
+            handle_html(d, 501, (char *)"Exec: Error - SSL not compiled in RhostMUSH\r\n", 
+                       (char *)"Return: <NULL>\r\n\r\n", NULL, NULL);
             process_output(d);
             shutdownsock(d, R_API);
             mudstate.debug_cmd = cmdsave;
@@ -5702,100 +5821,198 @@ do_command(DESC * d, char *command)
             break;
 #else
             i_encode64 = 0;
+#ifdef ENABLE_LUA
+            s_lua = NULL;
+#endif
+/* ---- this is the initialization chunk required for profiling/cpu handling */
+            /* As this is not part of the 'main' command set, we must initialize all the
+             * things that would normally be initialized for normal commands for this
+             */
+            /* For all valid commands we must initialize the timers */
+            mudstate.heavy_cpu_recurse = 0;
+            mudstate.heavy_cpu_tmark1 = time(NULL);
+            mudstate.chkcpu_toggle = 0;
+            mudstate.chkcpu_stopper = time(NULL);
+            mudstate.chkcpu_locktog = 0;
+            mudstate.stack_val = 0;
+            mudstate.stack_toggle = 0;
+            mudstate.sidefx_currcalls = 0;
+            mudstate.curr_percentsubs = 0;
+            mudstate.tog_percentsubs = 0;
+            mudstate.sidefx_toggle = 0;
+            mudstate.log_maximum = 0;
+
+            /* profiling */
+            mudstate.evalcount = 0;
+            mudstate.funccount = 0;
+            mudstate.allocsin = 0;
+            mudstate.allocsout = 0;
+            mudstate.attribfetchcount = 0;
+            itimer.it_interval.tv_sec = 0;
+            itimer.it_interval.tv_usec = 0;
+            itimer.it_value.tv_usec = 0;
+            itimer.it_value.tv_sec = 1000;
+            setitimer(ITIMER_PROF, &itimer, NULL);
+/* End of the profile/cpu chunk */
+
             s_snarfing = alloc_lbuf("cmd_get");
             s_snarfing2 = alloc_lbuf("cmd_get2");
             s_snarfing3 = alloc_lbuf("cmd_get3");
             s_snarfing4 = alloc_lbuf("cmd_get4");
+            s_snarfheader = alloc_lbuf("cmd_getheader");
+            s_snarfvalue = alloc_lbuf("cmd_getvalue");
             s_buffer = alloc_lbuf("cmd_get_buff");
             s_usepassptr = s_usepass = alloc_lbuf("cmd_get_userpass");
             s_user = alloc_lbuf("cmd_get_user");
             strcpy(s_buffer, arg);
             s_strtok = strtok_r(s_buffer, "\n", &s_strtokr);
-            i_parse = i_snarfing = i_usepass = i_snarfing4 = 0;
-#ifdef ENABLE_WEBSOCKETS
+            i_enc64 = i_parse = i_snarfing = i_usepass = i_snarfing4 = 0;
             ///// NEW WEBSOCK
-            int i_socksnarf = 0, i_sockver = 0;
+            int i_socksnarf = 0;
             char *s_sockhost = alloc_lbuf("cmd_sockhost");
             char *s_sockkey = alloc_lbuf("cmd_sockkey");
+            char *s_sockver = alloc_lbuf("cmd_sockver");
             ///// END NEW WEBSOCK
-#endif
 
+            s_enc64 = alloc_lbuf("cmd_get_exec64");
             while ( s_strtok ) {
+               // Check if we have a header
+               i_snarfheaders = sscanf(s_strtok, (char *)"%[^:]: %[^\n]", s_snarfheader, s_snarfvalue);
+               if ( 2 == i_snarfheaders ) {
 
-#ifdef ENABLE_WEBSOCKETS
                ////////   NEW WEBSOCK
                ///// TODO: Improve logic here
-               if ( !stricmp(s_strtok, (char *)"Upgrade: WebSocket") ) {
-                   i_socksnarf++;
-               }
-               if ( !stricmp(s_strtok, (char *)"Connection: Upgrade") ) {
-                   i_socksnarf++;
-               }
-               if ( (sscanf(s_strtok, "Host: %s", s_sockhost) == 1) ) {
-                   i_socksnarf++;
-               }
-               if ( (sscanf(s_strtok, "Sec-WebSocket-Version: %d", &i_sockver) == 1) ) {
-                   if (i_sockver == 13)
-                       i_socksnarf++;
-               }
-               if ( (sscanf(s_strtok, "Sec-WebSocket-Key: %s", s_sockkey) == 1) ) {
-                   if (validate_websocket_key(s_sockkey)) {
-                       i_socksnarf++;
-                   }
-               }
+
+                  if ( !stricmp(s_snarfheader, (char *)"Upgrade" ) ) {
+                     if ( !stricmp(s_snarfvalue, (char *)"Websocket" ) ) {
+                        i_socksnarf++;
+                     }
+                  }
+
+                  if ( !stricmp(s_snarfheader, (char *)"Connection" ) ) {
+                     if ( !stricmp(s_snarfvalue, (char *)"Upgrade" ) ) {
+                        i_socksnarf++;
+                     }
+                  }
+
+                  if ( !stricmp(s_snarfheader, (char *)"Host" ) ) {
+                     strcpy(s_sockhost, s_snarfvalue);
+                     i_socksnarf++;
+                  }
+
+                  if ( !stricmp(s_snarfheader, (char *)"Sec-WebSocket-Version" ) ) {
+                     strcpy(s_sockver, s_snarfvalue);
+                     if ( !stricmp(s_sockver, (char *)"13" ) ) {
+                        i_socksnarf++;
+                     }
+                  }
+
+                  if ( !stricmp(s_snarfheader, (char *)"Sec-WebSocket-Key" ) ) {
+                     strcpy(s_sockkey, s_snarfvalue);
+#ifdef ENABLE_WEBSOCKETS
+                     if (validate_websocket_key(s_sockkey)) {
+                        i_socksnarf++;
+                     }
+#else
+                     i_socksnarf++;
+#endif
+                  }
+
                ////////   END NEW WEBSOCK
+
+                  if ( (d->timeout == 1) && !stricmp(s_snarfheader, (char *)"Keep-Alive" ) ) {
+                     if ( !strncasecmp(s_snarfvalue, (char *)"timeout=", 8) ) {
+                        i_timeout = atoi(strchr(s_snarfvalue, '=')+1);
+                        if ( i_timeout < 1 )
+                           i_timeout = 1;
+                        if ( i_timeout > mudconf.max_api_timeout ) 
+                           i_timeout = mudconf.max_api_timeout;
+                        d->timeout = i_timeout;
+                     }
+                  }
+
+                  if ( !i_snarfing && !stricmp(s_snarfheader, (char *)"Exec" ) ) {
+                     strcpy(s_snarfing, s_snarfvalue);
+                     i_snarfing = 1;
+                  }
+
+                  if ( !i_enc64 && !stricmp(s_snarfheader, (char *)"Exec64" ) ) {
+                     strcpy(s_enc64, s_snarfvalue);
+                     i_enc64 = i_snarfing = 1;
+                  }
+
+#ifdef ENABLE_LUA
+                  if ( !s_lua && !stricmp(s_snarfheader, (char *)"X-Lua" ) ) {
+                     s_lua = alloc_lbuf("cmd_lua");
+                     strcpy(s_lua, s_snarfvalue);
+                  }
+
+                  if ( !stricmp(s_snarfheader, (char *)"X-Lua64" ) ) {
+                     if(s_lua) {
+                         free_lbuf(s_lua);
+                     }
+                     s_lua = alloc_lbuf("cmd_lua");
+                     s_luaptr = s_lua;
+                     decode_base64((const char*)s_snarfvalue, strlen(s_snarfvalue), s_lua, &s_luaptr, 0);
+                  }
 #endif
 
-               if ( !i_snarfing && (sscanf(s_strtok, "Exec: %[^\n]", s_snarfing) == 1) ) {
-                  i_snarfing = 1;
-               }
-               if ( !i_snarfing4 && (sscanf(s_strtok, "Origin: %[^\n]", s_snarfing4) == 1) ) {
-                  i_snarfing4 = 1;
-               }
-               if ( sscanf(s_strtok, "Parse: %[^\n]", s_snarfing2) == 1 ) {
-                  /* Default behavior -- set to 0 */
-                  if ( stricmp( s_snarfing2, (char *)"parse") == 0 ) {
-                     i_parse = 0;
-                  } else if ( stricmp( s_snarfing2, (char *)"ansiparse") == 0 ) {
-                     i_parse = 3;
-                  /* Do not parse -- ergo, only percent subs */
-                  } else if ( stricmp( s_snarfing2, (char *)"noparse") == 0 ) {
-                     i_parse = 1;
-                  } else if ( stricmp( s_snarfing2, (char *)"ansinoparse") == 0 ) {
-                     i_parse = 4;
-                  } else if ( stricmp( s_snarfing2, (char *)"ansionly") == 0 ) {
-                  /* Take the string and only process it through the ansi processor */
-                     i_parse = 2;
-                  /* Illegal value so just set to default */
-                  } else {
-                     i_parse = 0;
+                  if ( !i_snarfing4 && !stricmp(s_snarfheader, (char *)"Origin" ) ) {
+                     strcpy(s_snarfing4, s_snarfvalue);
+                     i_snarfing4 = 1;
                   }
-               }
-               if ( sscanf(s_strtok, "Encode: %[^\n]", s_snarfing3) == 1 ) {
-                  if ( stricmp(s_snarfing3, (char *)"yes") == 0) {
-                     i_encode64 = 1;
-                  }
-               }
-               if ( !i_usepass && (sscanf(s_strtok, "Authorization: Basic %[^\n]", s_user) == 1) ) {
-                  i_usepass = strlen(s_user);
-                  decode_base64((const char*)s_user, i_usepass, s_usepass, &s_usepassptr, 0);
-                  i_usepass = 1;
-               }
 
+                  if ( !stricmp(s_snarfheader, (char *)"Parse" ) ) {
+                     /* Default behavior -- set to 0 */
+                     if ( stricmp( s_snarfvalue, (char *)"parse") == 0 ) {
+                        i_parse = 0;
+                     } else if ( stricmp( s_snarfvalue, (char *)"ansiparse") == 0 ) {
+                        i_parse = 3;
+                     /* Do not parse -- ergo, only percent subs */
+                     } else if ( stricmp( s_snarfvalue, (char *)"noparse") == 0 ) {
+                        i_parse = 1;
+                     } else if ( stricmp( s_snarfvalue, (char *)"ansinoparse") == 0 ) {
+                        i_parse = 4;
+                     } else if ( stricmp( s_snarfvalue, (char *)"ansionly") == 0 ) {
+                     /* Take the string and only process it through the ansi processor */
+                        i_parse = 2;
+                     /* Illegal value so just set to default */
+                     } else {
+                        i_parse = 0;
+                     }
+                  }
+
+                  if ( !stricmp(s_snarfheader, (char *)"Encode" ) ) {
+                     if ( !stricmp(s_snarfvalue, (char *)"yes" ) ) {
+                        i_encode64 = 1;
+                     }
+                  }
+
+                  if ( !i_usepass && !stricmp(s_snarfheader, (char *)"Authorization" ) ) {
+                     if ( sscanf(s_snarfvalue, "Basic %[^\n]", s_user) == 1 ) {
+                        i_usepass = strlen(s_user);
+                        decode_base64((const char*)s_user, i_usepass, s_usepass, &s_usepassptr, 0);
+                        i_usepass = 1;
+                     }
+                  }
+               }
                s_strtok = strtok_r(NULL, "\n", &s_strtokr);
             }
 
-#ifdef ENABLE_WEBSOCKETS
             ///// NEW WEBSOCK
             if (i_socksnarf >= 5) {
                 free_lbuf(s_user); // Was allocated but will not be used
+#ifdef ENABLE_WEBSOCKETS
                 STARTLOG(LOG_ALWAYS, "NET", "WS");
                 log_text("Received WebSocket opening handshake.");
                 ENDLOG;
                 complete_handshake(d, s_sockkey);
+#else
+                s_dtime = (char *) ctime(&mudstate.now);
+                handle_html(d, 501, (char *)"Return: Error - Websockets not enabled\r\n\r\n", NULL, NULL, NULL);
+#endif
             } else
             ///// END NEW WEBSOCK
-#endif
             if ( ((*s_usepass == '#') && isdigit(*(s_usepass+1))) && (strchr(s_usepass, ':') != NULL) ) {
                free_lbuf(s_user);
                s_user = s_usepass+1;
@@ -5804,17 +6021,11 @@ do_command(DESC * d, char *command)
                s_pass++;
                thing = atoi(s_user);
                if ( !Good_chk(thing) ) {
-                  queue_string(d, "HTTP/1.1 404 Not Found\r\n");
-                  queue_string(d, "Content-type: text/plain\r\n");
-                  queue_string(d, unsafe_tprintf("Date: %s", s_dtime));
-                  queue_string(d, "Exec: Error - Invalid target\r\n");
-                  queue_string(d, "Return: <NULL>\r\n");
+                  handle_html(d, 404, (char *)"Exec: Error - Invalid target\r\n", 
+                              (char *)"Return: <NULL>\r\n\r\n", NULL, NULL);
                } else if ( !HasPriv(thing, NOTHING, POWER_API, POWER5, NOTHING) )  {
-                  queue_string(d, "HTTP/1.1 403 Forbidden\r\n");
-                  queue_string(d, "Content-type: text/plain\r\n");
-                  queue_string(d, unsafe_tprintf("Date: %s", s_dtime));
-                  queue_string(d, "Exec: Error - Permission Denied\r\n");
-                  queue_string(d, "Return: <NULL>\r\n");
+                  handle_html(d, 403, (char *)"Exec: Error - Permission Denied\r\n", 
+                              (char *)"Return: <NULL>\r\n\r\n", NULL, NULL);
                } else {
                   atrp = atr_str3("_APIIP");
                   i_snarfing = 0;
@@ -5828,19 +6039,79 @@ do_command(DESC * d, char *command)
                      sprintf(s_get, "%s", (char *)"127.0.0.1");
                   }
                   if ( !lookup(inet_ntoa(d->address.sin_addr), s_get, 1, &aflags) ) {
-                     queue_string(d, "HTTP/1.1 403 Forbidden\r\n");
-                     queue_string(d, "Content-type: text/plain\r\n");
-                     queue_string(d, unsafe_tprintf("Date: %s", s_dtime));
-                     queue_string(d, "Exec: Error - IP not allowed\r\n");
-                     queue_string(d, "Return: <NULL>\r\n");
+                     handle_html(d, 403, (char *)"Exec: Error - IP not allowed\r\n", 
+                                 (char *)"Return: <NULL>\r\n\r\n", NULL, NULL);
                      i_snarfing = 1;
                   }
                   free_lbuf(s_get);
+
+#ifdef ENABLE_LUA
+                  if ( s_lua )  {
+                     if ( Totem(atoi(s_user),9) & TOTEM_API_LUA ) {
+                        lua = open_lua_interpreter(thing);
+                        if(!lua) {
+                           handle_html(d, 500, (char *)"Exec: Error - Timeout opening interpreter\r\n",
+                                       (char *)"Return: <NULL>\r\n\r\n", NULL, NULL);
+                           broadcast_monitor(thing, MF_CPU, "LUA INTERPRETER TIMEOUT REACHED", (char *)"LUA", NULL, thing, 0, 0, NULL);
+                           goto end_lua; /* Abort, abort! */
+                        }
+
+                        free_lbuf(s_buffer);
+                        s_buffer = exec_lua_script(lua, s_lua, &i_lualength);
+                        if(!s_buffer) {
+                           handle_html(d, 500, (char *)"Exec: Error - Timeout running script\r\n",
+                                       (char *)"Return: <NULL>\r\n\r\n", NULL, NULL);
+                           /* We need to re-cache the buffer here */
+                           s_buffer = alloc_lbuf("cmd_post_buff");
+                           broadcast_monitor(thing, MF_CPU, "LUA EXECUTION TIMEOUT REACHED", (char *)"LUA API->GET", NULL, thing, 0, 0, NULL);
+                           goto end_lua; /* Abort, abort! */
+                        }
+      
+                        close_lua_interpreter(lua);
+
+                        /* This is a one off for various handlings for LUA */
+                        handle_html(d, 200, NULL, NULL, NULL, NULL);
+                        if ( i_snarfing4 ) {
+                           queue_string(d, unsafe_tprintf("Access-Control-Allow-Origin: %s\r\n", s_snarfing4));
+                           queue_string(d, "Access-Control-Allow-Methods: POST, GET\r\n");
+                           queue_string(d, "Vary: Accept-Encoding, Origin\r\n");
+                        }
+                        queue_string(d, "X-Lua: Ok - Executed\r\n");
+                        if ( i_encode64 ) {
+                           queue_string(d, "X-Lua-Warning: Base64 Encoding not supported for output\r\n");
+                        }
+                        queue_string(d, unsafe_tprintf("Content-Length: %i\r\n\r\n", i_lualength));
+                        s_luaptr = s_buffer;
+                        while(i_lualength > LBUF_SIZE - 1) {
+                            i_lualength -= LBUF_SIZE - 1;
+                            queue_write(d, s_luaptr, LBUF_SIZE - 1);
+                            s_luaptr += LBUF_SIZE - 1;
+                        }
+                        if(i_lualength) {
+                            queue_write(d, s_luaptr, i_lualength);
+                        }
+                        free(s_buffer);
+                        s_buffer = alloc_lbuf("cmd_post_buff");
+                     } else {
+                        handle_html(d, 403, (char *)"Exec: Error - Permission Denied\r\n",
+                                    (char *)"Return: <NULL>\r\n\r\n", NULL, NULL);
+                     }
+                     end_lua: /* I'm using goto as a poor man's exception system. Fite me. --polk */
+                     free_lbuf(s_lua);
+                     s_lua = NULL;
+                     i_snarfing = 1; /* We already handled this, move on */
+                  }
+#endif
+
                   if ( !i_snarfing ) {
                      atrp = atr_str3("_APIPASSWD");
                      if ( atrp ) {
                         s_get = atr_get(thing, atrp->number, &aowner, &aflags);
                         if ( *s_get && mush_crypt_validate(thing, s_pass, s_get, 0)) {
+                           if ( i_enc64 ) {
+                              s_enc64ptr = s_snarfing;
+                              decode_base64((const char*)s_enc64, strlen(s_enc64), s_snarfing, &s_enc64ptr, 0);
+                           } 
                            if ( *s_snarfing ) {
                               free_lbuf(s_buffer);
                               i_cputog = mudstate.chkcpu_toggle;
@@ -5857,7 +6128,7 @@ do_command(DESC * d, char *command)
                                             s_ansi2p = s_ansi2 = alloc_lbuf("get_parse_ansibuf2");
                                             s_ansi3p = s_ansi3 = alloc_lbuf("get_parse_ansibuf3");
                                             parse_ansi(s_snarfing, s_ansi1, &s_ansi1p, s_ansi2, &s_ansi2p, s_ansi3, &s_ansi3p);
-                                            strcpy(s_buffer, s_ansi2); 
+                                            strcpy(s_buffer, s_ansi3); 
                                             free_lbuf(s_ansi1);
                                             free_lbuf(s_ansi2);
                                             free_lbuf(s_ansi3);
@@ -5871,7 +6142,7 @@ do_command(DESC * d, char *command)
                                          s_ansi2p = s_ansi2 = alloc_lbuf("get_parse_ansibuf2");
                                          s_ansi3p = s_ansi3 = alloc_lbuf("get_parse_ansibuf3");
                                          parse_ansi(s_snarfing, s_ansi1, &s_ansi1p, s_ansi2, &s_ansi2p, s_ansi3, &s_ansi3p);
-                                         strcpy(s_buffer, s_ansi2); 
+                                         strcpy(s_buffer, s_ansi3); 
                                          free_lbuf(s_ansi1);
                                          free_lbuf(s_ansi2);
                                          free_lbuf(s_ansi3);
@@ -5890,7 +6161,7 @@ do_command(DESC * d, char *command)
                                             s_ansi2p = s_ansi2 = alloc_lbuf("get_parse_ansibuf2");
                                             s_ansi3p = s_ansi3 = alloc_lbuf("get_parse_ansibuf3");
                                             parse_ansi(s_snarfing, s_ansi1, &s_ansi1p, s_ansi2, &s_ansi2p, s_ansi3, &s_ansi3p);
-                                            strcpy(s_buffer, s_ansi2); 
+                                            strcpy(s_buffer, s_ansi3); 
                                             free_lbuf(s_ansi1);
                                             free_lbuf(s_ansi2);
                                             free_lbuf(s_ansi3);
@@ -5912,72 +6183,62 @@ do_command(DESC * d, char *command)
                                  ENDLOG
                               }
                               mudstate.chkcpu_toggle = i_cputog;
-                              queue_string(d, "HTTP/1.1 200 OK\r\n");
-                              queue_string(d, "Content-type: text/plain\r\n");
+
+                              /* This is a one off handler */
+                              handle_html(d, 200, NULL, NULL, NULL, NULL);
                               if ( i_snarfing4 ) {
                                  queue_string(d, unsafe_tprintf("Access-Control-Allow-Origin: %s\r\n", s_snarfing4));
                                  queue_string(d, "Access-Control-Allow-Methods: POST, GET\r\n");
                                  queue_string(d, "Vary: Accept-Encoding, Origin\r\n");
                               }
-                              queue_string(d, unsafe_tprintf("Date: %s", s_dtime));
                               queue_string(d, "Exec: Ok - Executed\r\n");
                               if ( i_encode64 ) {
                                  free_lbuf(s_snarfing2);
                                  s_snarfing2 = s_snarfing;
                                  i_encode64 = strlen(s_buffer);
                                  encode_base64((const char*)s_buffer, i_encode64, s_snarfing, &s_snarfing2);
-                                 queue_string(d, unsafe_tprintf("Return: %.*s\r\n", (LBUF_SIZE - 14), s_snarfing));
+                                 queue_string(d, unsafe_tprintf("Return: %.*s\r\n\r\n", (LBUF_SIZE - 14), s_snarfing));
                                  s_snarfing2 = alloc_lbuf("tmp_get_buffer");
                               } else {
-                                 queue_string(d, unsafe_tprintf("Return: %.*s\r\n", (LBUF_SIZE - 14), s_buffer));
+                                 queue_string(d, unsafe_tprintf("Return: %.*s\r\n\r\n", (LBUF_SIZE - 14), s_buffer));
                               }
                            } else {
-                              queue_string(d, "HTTP/1.1 400 Bad Request\r\n");
-                              queue_string(d, "Content-type: text/plain\r\n");
-                              queue_string(d, unsafe_tprintf("Date: %s", s_dtime));
-                              queue_string(d, "Exec: Error - Empty String\r\n");
-                              queue_string(d, "Return: <NULL>\r\n");
+                              handle_html(d, 400, (char *)"Exec: Error - Empty String\r\n",
+                                          (char *)"Return: <NULL>\r\n\r\n", NULL, NULL);
                            }
                         } else {
-                           queue_string(d, "HTTP/1.1 403 Forbidden\r\n");
-                           queue_string(d, "Content-type: text/plain\r\n");
-                           queue_string(d, unsafe_tprintf("Date: %s", s_dtime));
-                           queue_string(d, "Exec: Error - Permission Denied\r\n");
-                           queue_string(d, "Return: <NULL>\r\n");
+                           handle_html(d, 403, (char *)"Exec: Error - Permission Denied\r\n",
+                                       (char *)"Return: <NULL>\r\n\r\n", NULL, NULL);
                         }
                         free_lbuf(s_get);
                      } else {
-                        queue_string(d, "HTTP/1.1 403 Forbidden\r\n");
-                        queue_string(d, "Content-type: text/plain\r\n");
-                        queue_string(d, unsafe_tprintf("Date: %s", s_dtime));
-                        queue_string(d, "Exec: Error - Permission Denied\r\n");
-                        queue_string(d, "Return: <NULL>\r\n");
+                        handle_html(d, 403, (char *)"Exec: Error - Permission Denied\r\n",
+                                    (char *)"Return: <NULL>\r\n\r\n", NULL, NULL);
                      }
                   }
                }
             } else {
-               queue_string(d, "HTTP/1.1 403 Forbidden\r\n");
-               queue_string(d, "Content-type: text/plain\r\n");
-               queue_string(d, unsafe_tprintf("Date: %s", s_dtime));
-               queue_string(d, "Exec: Error - Malformed User or Password\r\n");
-               queue_string(d, "Return: <NULL>\r\n");
+               handle_html(d, 403, (char *)"Exec: Error - Malformed User or Password\r\n",
+                           (char *)"Return: <NULL>\r\n\r\n", NULL, NULL);
                free_lbuf(s_user);
             }
 
+            free_lbuf(s_enc64);
             free_lbuf(s_snarfing);
             free_lbuf(s_snarfing2);
             free_lbuf(s_snarfing3);
             free_lbuf(s_snarfing4);
+            free_lbuf(s_snarfheader);
+            free_lbuf(s_snarfvalue);
             free_lbuf(s_buffer);
             free_lbuf(s_usepass);
-#ifdef ENABLE_WEBSOCKETS
             ///// NEW WEBSOCK
             free_lbuf(s_sockhost);
             free_lbuf(s_sockkey);
+            free_lbuf(s_sockver);
             ///// END NEW WEBSOCK
-#endif
             process_output(d);
-            if (d->flags & DS_API)
+            if ((d->flags & DS_API) && (d->timeout == 1) )
                 shutdownsock(d, R_API);
             mudstate.debug_cmd = cmdsave;
             if ( chk_perm && cp )
@@ -5998,10 +6259,8 @@ do_command(DESC * d, char *command)
             }
             s_dtime = (char *) ctime(&mudstate.now);
 #ifndef HAS_OPENSSL
-            queue_string(d, "HTTP/1.1 200 OK\r\n");
-            queue_string(d, "Content-type: text/plain\r\n");
-            queue_string(d, unsafe_tprintf("Date: %s", s_dtime));
-            queue_string(d, "Exec: Error - SSL not compiled in RhostMUSH\r\n");
+            handle_html(d, 501, (char *)"Exec: Error - SSL not compiled in RhostMUSH\r\n",
+                       (char *)"Return: <NULL>\r\n\r\n", NULL, NULL);
             process_output(d);
             shutdownsock(d, R_API);
             mudstate.debug_cmd = cmdsave;
@@ -6010,32 +6269,95 @@ do_command(DESC * d, char *command)
             RETURN(0); /* #147 */
             break;
 #else
+/* ---- this is the initialization chunk required for profiling/cpu handling */
+            /* As this is not part of the 'main' command set, we must initialize all the
+             * things that would normally be initialized for normal commands for this
+             */
+            /* For all valid commands we must initialize the timers */
+            mudstate.heavy_cpu_recurse = 0;
+            mudstate.heavy_cpu_tmark1 = time(NULL);
+            mudstate.chkcpu_toggle = 0;
+            mudstate.chkcpu_stopper = time(NULL);
+            mudstate.chkcpu_locktog = 0;
+            mudstate.stack_val = 0;
+            mudstate.stack_toggle = 0;
+            mudstate.sidefx_currcalls = 0;
+            mudstate.curr_percentsubs = 0;
+            mudstate.tog_percentsubs = 0;
+            mudstate.sidefx_toggle = 0;
+            mudstate.log_maximum = 0;
+
+            /* profiling */
+            mudstate.evalcount = 0;
+            mudstate.funccount = 0;
+            mudstate.allocsin = 0;
+            mudstate.allocsout = 0;
+            mudstate.attribfetchcount = 0;
+            itimer.it_interval.tv_sec = 0;
+            itimer.it_interval.tv_usec = 0;
+            itimer.it_value.tv_usec = 0;
+            itimer.it_value.tv_sec = 1000;
+            setitimer(ITIMER_PROF, &itimer, NULL);
+/* End of the profile/cpu chunk */
+
             s_snarfing = alloc_lbuf("cmd_post");
             s_snarfing4 = alloc_lbuf("cmd_post2");
+            s_snarfheader = alloc_lbuf("cmd_post_snarfheader");
+            s_snarfvalue = alloc_lbuf("cmd_post_snarfvalue");
             s_buffer = alloc_lbuf("cmd_post_buff");
             s_usepassptr = s_usepass = alloc_lbuf("cmd_post_userpass");
             s_user = alloc_lbuf("cmd_post_user");
             strcpy(s_buffer, arg);
             s_strtok = strtok_r(s_buffer, "\n", &s_strtokr);
-            i_snarfing = i_usepass = i_snarfing4 = 0;
+            i_enc64 = i_snarfing = i_usepass = i_snarfing4 = 0;
             i_time = 0.0;
+            s_enc64 = alloc_lbuf("cmd_post_exec64");
             while ( s_strtok ) {
-               if ( !i_snarfing && (sscanf(s_strtok, "Exec: %[^\n]", s_snarfing) == 1) ) {
-                  i_snarfing = 1;
-               }
-               if ( !i_snarfing4 && (sscanf(s_strtok, "Origin: %[^\n]", s_snarfing4) == 1) ) {
-                  i_snarfing = 1;
-               }
-               if ( sscanf(s_strtok, "Time: %lf", &i_time) == 1 ) {
-                  if ( i_time < 0 )
-                     i_time = 0;
-                  if ( i_time > 2000000000 )
-                     i_time = 2000000000;
-               }
-               if ( !i_usepass && (sscanf(s_strtok, "Authorization: Basic %[^\n]", s_user) == 1) ) {
-                  i_usepass = strlen(s_user);
-                  decode_base64((const char*)s_user, i_usepass, s_usepass, &s_usepassptr, 0);
-                  i_usepass = 1;
+               // Check if we have a header
+               i_snarfheaders = sscanf(s_strtok, (char *)"%[^:]: %[^\n]", s_snarfheader, s_snarfvalue);
+               if ( 2 == i_snarfheaders ) {
+                  if ( (d->timeout == 1) && !stricmp(s_snarfheader, (char *)"Keep-Alive" ) ) {
+                     if ( !strncasecmp(s_snarfvalue, (char *)"timeout=", 8) ) {
+                        i_timeout = atoi(strchr(s_snarfvalue, '=')+1);
+                        if ( i_timeout < 1 )
+                           i_timeout = 1;
+                        if ( i_timeout > mudconf.max_api_timeout ) 
+                           i_timeout = mudconf.max_api_timeout;
+                        d->timeout = i_timeout;
+                     }
+                  }
+
+                  if ( !i_snarfing && !stricmp(s_snarfheader, (char *)"Exec" ) ) {
+                     strcpy(s_snarfing, s_snarfvalue);
+                     i_snarfing = 1;
+                  }
+
+                  if ( !i_enc64 && !stricmp(s_snarfheader, (char *)"Exec64" ) ) {
+                     strcpy(s_enc64, s_snarfvalue);
+                     i_enc64 = i_snarfing = 1;
+                  }
+
+                  if ( !i_snarfing4 && !stricmp(s_snarfheader, (char *)"Origin" ) ) {
+                     strcpy(s_snarfing4, s_snarfvalue);
+                     i_snarfing4 = 1;
+                  }
+
+                  if ( !stricmp(s_snarfheader, (char *)"Time" ) ) {
+                     if ( 1 == sscanf(s_snarfvalue, "%lf", &i_time) ) {
+                        if ( i_time < 0 )
+                           i_time = 0;
+                        if ( i_time > 2000000000 )
+                           i_time = 2000000000;
+                     }
+                  }
+
+                  if ( !i_usepass && !stricmp(s_snarfheader, (char *)"Authorization" ) ) {
+                     if ( sscanf(s_snarfvalue, "Basic %[^\n]", s_user) == 1 ) {
+                        i_usepass = strlen(s_user);
+                        decode_base64((const char*)s_user, i_usepass, s_usepass, &s_usepassptr, 0);
+                        i_usepass = 1;
+                     }
+                  }
                }
                s_strtok = strtok_r(NULL, "\n", &s_strtokr);
             }
@@ -6047,15 +6369,11 @@ do_command(DESC * d, char *command)
                s_pass++;
                thing = atoi(s_user);
                if ( !Good_chk(thing) ) {
-                  queue_string(d, "HTTP/1.1 404 Not Found\r\n");
-                  queue_string(d, "Content-type: text/plain\r\n");
-                  queue_string(d, unsafe_tprintf("Date: %s", s_dtime));
-                  queue_string(d, "Exec: Error - Invalid target\r\n");
+                  handle_html(d, 404, (char *)"Exec: Error - Invalid Target\r\n",
+                              (char *)"Return: <NULL>\r\n\r\n", NULL, NULL);
                } else if ( !HasPriv(thing, NOTHING, POWER_API, POWER5, NOTHING) )  {
-                  queue_string(d, "HTTP/1.1 403 Forbidden\r\n");
-                  queue_string(d, "Content-type: text/plain\r\n");
-                  queue_string(d, unsafe_tprintf("Date: %s", s_dtime));
-                  queue_string(d, "Exec: Error - Permission Denied\r\n");
+                  handle_html(d, 403, (char *)"Exec: Error - Permission Denied\r\n",
+                              (char *)"Return: <NULL>\r\n\r\n", NULL, NULL);
                } else {
                   atrp = atr_str3("_APIIP");
                   i_snarfing = 0;
@@ -6069,10 +6387,8 @@ do_command(DESC * d, char *command)
                      sprintf(s_get, "%s", (char *)"127.0.0.1");
                   }
                   if ( !lookup(inet_ntoa(d->address.sin_addr), s_get, 1, &aflags) ) {
-                     queue_string(d, "HTTP/1.1 403 Forbidden\r\n");
-                     queue_string(d, "Content-type: text/plain\r\n");
-                     queue_string(d, unsafe_tprintf("Date: %s", s_dtime));
-                     queue_string(d, "Exec: Error - IP not allowed\r\n");
+                     handle_html(d, 403, (char *)"Exec: Error - IP not allowed\r\n",
+                                 (char *)"Return: <NULL>\r\n\r\n", NULL, NULL);
                      i_snarfing = 1;
                   }
                   free_lbuf(s_get);
@@ -6081,51 +6397,52 @@ do_command(DESC * d, char *command)
                      if ( atrp ) {
                         s_get = atr_get(thing, atrp->number, &aowner, &aflags);
                         if ( *s_get && mush_crypt_validate(thing, s_pass, s_get, 0)) {
+                           if ( i_enc64 ) {
+                              s_enc64ptr = s_snarfing;
+                              decode_base64((const char*)s_enc64, strlen(s_enc64), s_snarfing, &s_enc64ptr, 0);
+                           } 
                            if ( *s_snarfing ) {
 	                      wait_que(thing, thing, i_time, NOTHING, s_snarfing, (char **)NULL, 0, NULL, NULL);
-                              queue_string(d, "HTTP/1.1 200 OK\r\n");
-                              queue_string(d, "Content-type: text/plain\r\n");
+
+                              /* One off handler */
+                              handle_html(d, 200, NULL, NULL, NULL, NULL);
                               if ( i_snarfing4 ) {
                                  queue_string(d, unsafe_tprintf("Access-Control-Allow-Origin: %s\r\n", s_snarfing4));
                                  queue_string(d, "Access-Control-Allow-Methods: POST, GET\r\n");
                                  queue_string(d, "Vary: Accept-Encoding, Origin\r\n");
                               }
-                              queue_string(d, unsafe_tprintf("Date: %s", s_dtime));
-                              queue_string(d, "Exec: Ok - Queued\r\n");
+                              queue_string(d, "Exec: Ok - Queued\r\n\r\n");
                            } else {
-                              queue_string(d, "HTTP/1.1 400 Bad Request\r\n");
-                              queue_string(d, "Content-type: text/plain\r\n");
-                              queue_string(d, unsafe_tprintf("Date: %s", s_dtime));
-                              queue_string(d, "Exec: Error - Empty String\r\n");
+                              handle_html(d, 400, (char *)"Exec: Error - Empty String\r\n",
+                                          (char *)"Return: <NULL>\r\n\r\n", NULL, NULL);
                            }
                         } else {
-                           queue_string(d, "HTTP/1.1 403 Forbidden\r\n");
-                           queue_string(d, "Content-type: text/plain\r\n");
-                           queue_string(d, unsafe_tprintf("Date: %s", s_dtime));
-                           queue_string(d, "Exec: Error - Permission Denied\r\n");
+                           handle_html(d, 403, (char *)"Exec: Error - Permission Denied\r\n",
+                                       (char *)"Return: <NULL>\r\n\r\n", NULL, NULL);
                         }
                         free_lbuf(s_get);
                      } else {
-                        queue_string(d, "HTTP/1.1 403 Forbidden\r\n");
-                        queue_string(d, "Content-type: text/plain\r\n");
-                        queue_string(d, unsafe_tprintf("Date: %s", s_dtime));
-                        queue_string(d, "Exec: Error - Permission Denied\r\n");
+                        handle_html(d, 403, (char *)"Exec: Error - Permission Denied\r\n",
+                                    (char *)"Return: <NULL>\r\n\r\n", NULL, NULL);
                      }
                   }
                }
             } else {
-               queue_string(d, "HTTP/1.1 403 Forbidden\r\n");
-               queue_string(d, "Content-type: text/plain\r\n");
-               queue_string(d, unsafe_tprintf("Date: %s", s_dtime));
-               queue_string(d, "Exec: Error - Malformed User or Password\r\n");
+               handle_html(d, 403, (char *)"Exec: Error - Malformed User or Password\r\n",
+                           (char *)"Return: <NULL>\r\n\r\n", NULL, NULL);
                free_lbuf(s_user);
             }
+
+            free_lbuf(s_enc64);
             free_lbuf(s_snarfing);
             free_lbuf(s_snarfing4);
+            free_lbuf(s_snarfheader);
+            free_lbuf(s_snarfvalue);
             free_lbuf(s_buffer);
             free_lbuf(s_usepass);
             process_output(d);
-            shutdownsock(d, R_API);
+            if ((d->flags & DS_API) && (d->timeout == 1) )
+               shutdownsock(d, R_API);
             mudstate.debug_cmd = cmdsave;
             if ( chk_perm && cp )
                cp->perm = store_perm;
@@ -6180,14 +6497,11 @@ do_command(DESC * d, char *command)
     /* Any API foo should just drop here as we have nothing for them to do */
     if ( d->flags & DS_API ) {
        s_dtime = (char *) ctime(&mudstate.now);
-       queue_string(d, "HTTP/1.1 400 Bad Request\r\n");
-       queue_string(d, "Content-type: text/plain\r\n");
-       queue_string(d, unsafe_tprintf("Date: %s", s_dtime));
-       queue_string(d, "Exec: Error - Unrecognized Input\r\n");
+       handle_html(d, 400, (char *)"Exec: Error - Unrecognized Input\r\n", NULL, NULL,  NULL);
        if ( cp ) {
-          queue_string(d, unsafe_tprintf("Return: Bad command -> %s", cp->name));
+          queue_string(d, unsafe_tprintf("Return: Bad command -> %s\r\n\r\n", cp->name));
        } else { 
-          queue_string(d, "Return: <NULL>\r\n");
+          queue_string(d, "Return: <NULL>\r\n\r\n");
        }
        process_output(d);
        shutdownsock(d, R_API);
@@ -6242,7 +6556,7 @@ NDECL(process_commands)
 		    if (d->flags & DS_HAS_DOOR && t->cmd[0] != '!')
 			door_raw_input(d, t->cmd); 
 		    else {
-                        for (i = 0; i < MAX_GLOBAL_REGS; i++) {
+                        for (i = 0; i < (MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST); i++) {
                            *mudstate.global_regs[i] = '\0';
                            *mudstate.global_regs_backup[i] = '\0';
                            *mudstate.global_regsname[i] = '\0';

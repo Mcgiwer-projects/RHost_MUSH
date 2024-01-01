@@ -291,7 +291,7 @@ stricmp(char *buf1, char *buf2)
 
     p1 = buf1;
     p2 = buf2;
-    while ((*p1 != '\0') && (*p2 != '\0') && (tolower(*p1) == tolower(*p2))) {
+    while ( p1 && p2 && (*p1 != '\0') && (*p2 != '\0') && (tolower(*p1) == tolower(*p2))) {
 	p1++;
 	p2++;
     }
@@ -8426,11 +8426,11 @@ void
 do_mail(dbref player, dbref cause, int key, char *buf1, char *buf2)
 {
     int key2, flags, flags2, forcesend, i_fill1, i_fill2, i_fill3,
-        i_fill4, i_fill5, i_fill6, i_version;
+        i_fill4, i_fill5, i_fill6, i_version, acheck, i_pass, i_forced;
     char *p1, *p2, *atrxxx;
     dbref owner, owner2;
 
-    recblock = i_version = 0;
+    recblock = i_version = i_forced = 0;
     i_fill1 = i_fill2 = i_fill3 = 0;
     i_fill4 = i_fill5 = i_fill6 = 0;
     if (key & M_FSEND) {
@@ -8440,6 +8440,11 @@ do_mail(dbref player, dbref cause, int key, char *buf1, char *buf2)
 	override = 0;
     }
 
+    if ( (key & M_QUICK) && (key & (M_FORWARD|M_REPLY)) ) {
+       i_forced = 1;
+       key &=~M_QUICK;
+    }
+ 
     if ( (key & M_SAVE) && (key & M_READM) ) {
        key &= ~M_SAVE;
        i_version = 32;
@@ -8449,6 +8454,7 @@ do_mail(dbref player, dbref cause, int key, char *buf1, char *buf2)
 	notify_quiet(player, "Mail: Mail is currently turned off.");
 	return;
     }
+
     lastplayer = player;
     lastflag = key;
     if (!Wizard(Owner(player))) {
@@ -8457,6 +8463,12 @@ do_mail(dbref player, dbref cause, int key, char *buf1, char *buf2)
 		return;
 	}
     }
+
+    if ( (key & M_QUICK) && (key & ~M_QUICK) ) {
+       notify_quiet(player, "Illegal combination of switches.");
+       return;
+    }
+
     if ((!mudstate.nuke_status) && (!God(player)) && (key != M_PASS) && (isPlayer(player)) && (((key != M_QUICK) && (key != 0)) || ((key == 0) && ((*buf1 != '\0') || (*buf2 != '\0'))))) {
 	p1 = atr_get(player, A_MPASS, &owner, &flags);
 	if (*p1 != '\0') {
@@ -8501,23 +8513,47 @@ do_mail(dbref player, dbref cause, int key, char *buf1, char *buf2)
         key2 = (key2 | M_SEND);
     case M_REPLY:
     case M_SEND:
+        while ( buf1 && isspace(*buf1) ) {
+           buf1++;
+        }
 	if ((*buf2 != '\0') && (*buf1 != '\0')) {
-           if (Brandy(player) && !forcesend && isPlayer(player)) {
+           if ( (Brandy(player) && !i_forced) && !forcesend && isPlayer(player)) {
 	      atrxxx = atr_get(player, A_SAVESENDMAIL, &owner2, &flags2);
 	      if ( *atrxxx ) {
                  notify_quiet(player, "Mail: You already have a message in progress.");
                  notify_quiet(player, "      Use '-' to add new text, '--' to send, '-~' to send anonymously.");
               } else {
-                 if ( (key2 & M_REPLY) ) {
-                    atr_add_raw(player, A_TEMPBUFFER, "1 0");
-                 } else {
-                    atr_add_raw(player, A_TEMPBUFFER, "0 0");
+                 i_pass = 1;
+                 if ( (key2 &~ M_ANON) == M_REPLY ) {
+                    if ( isdigit(*buf1) ) {
+                       acheck = atoi(buf1);
+                       acheck = get_msg_index(player,acheck,1,NOTHING,1);
+                    } else if ( (*buf1 == '@') || (*buf1 == '^') ) {
+                       acheck = atoi(buf1+1);
+                       acheck = get_msg_index(player,acheck,1,NOTHING,1);
+                    } else {
+                       notify_quiet(player, "MAIL ERROR: Number expected");
+                       i_pass = 0;
+                       acheck = -255;
+                    }
+                    if ( (acheck < 1) && (acheck != -255) ) {
+	               notify_quiet(player, "MAIL ERROR: Bad message number specified");
+                       i_pass = 0;
+                    }
                  }
-                 atr_add_raw(player, A_SAVESENDMAIL, buf1);
-	         mail_write(player, key, "+subject", buf2);
-	         mail_write(player, key, "\t", "");
-                 notify_quiet(player, "Mail: You begin writing your new mail message.");
-                 notify_quiet(player, "      Use '-' to add new text, '--' to send, '-~' to send anonymously.");
+                 if ( i_pass ) {
+                    if ( (key2 & M_REPLY) ) {
+                       atr_add_raw(player, A_TEMPBUFFER, "1 0");
+                    } else {
+                       atr_add_raw(player, A_TEMPBUFFER, "0 0");
+                    }
+
+                    atr_add_raw(player, A_SAVESENDMAIL, buf1);
+	            mail_write(player, key, "+subject", buf2);
+	            mail_write(player, key, "\t", "");
+                    notify_quiet(player, "Mail: You begin writing your new mail message.");
+                    notify_quiet(player, "      Use '-' to add new text, '--' to send, '-~' to send anonymously.");
+                 }
               }
               free_lbuf(atrxxx);
            } else {
@@ -8528,19 +8564,37 @@ do_mail(dbref player, dbref cause, int key, char *buf1, char *buf2)
 	}
 	break;
     case M_FORWARD:
+        while ( buf1 && isspace(*buf1) ) {
+           buf1++;
+        }
 	if (*buf1 != '\0') {
-           if (Brandy(player) && isPlayer(player)) {
+           if ( (Brandy(player) && !i_forced) && isPlayer(player)) {
               atrxxx = atr_get(player, A_SAVESENDMAIL, &owner2, &flags2);
               if ( *atrxxx ) {
                  notify_quiet(player, "Mail: You already have a message in progress.");
                  notify_quiet(player, "      Use '-' to add new lines of text, '--' to send.");
               } else {
-                 atr_add_raw(player, A_TEMPBUFFER, "2 0");
-                 atr_add_raw(player, A_SAVESENDMAIL, buf1);
-	         mail_write(player, key, "+subject", buf2);
-	         mail_write(player, key, "\t", "");
-                 notify_quiet(player, "Mail: You begin writing your new mail message.");
-                 notify_quiet(player, "      Use '-' to add new lines of text, '--' to send.");
+                 i_pass = 1;
+                 if ( isdigit(*buf1) ) {
+                    acheck = atoi(buf1);
+                    acheck = get_msg_index(player,acheck,1,NOTHING,1);
+                 } else {
+                    notify_quiet(player, "MAIL ERROR: Number expected");
+                    i_pass = 0;
+                    acheck = -255;
+                 }
+                 if ( (acheck < 1) && (acheck != -255) ) {
+                    notify_quiet(player, "MAIL ERROR: Bad message number specified");
+                    i_pass = 0;
+                 }
+                 if ( i_pass ) {
+                    atr_add_raw(player, A_TEMPBUFFER, "2 0");
+                    atr_add_raw(player, A_SAVESENDMAIL, buf1);
+	            mail_write(player, key, "+subject", buf2);
+	            mail_write(player, key, "\t", "");
+                    notify_quiet(player, "Mail: You begin writing your new mail message.");
+                    notify_quiet(player, "      Use '-' to add new lines of text, '--' to send.");
+                 }
               }
               free_lbuf(atrxxx);
            } else {
@@ -8693,7 +8747,11 @@ do_mail(dbref player, dbref cause, int key, char *buf1, char *buf2)
 	}
 	break;
     default:
-	notify_quiet(player, "MAIL ERROR: Unknown mail command.");
+        if ( key & (M_ALL|M_ANON|M_FSEND|M_QUICK|M_SAVE) ) {
+           notify_quiet(player, "Illegal combination of switches.");
+        } else {
+	   notify_quiet(player, "MAIL ERROR: Unknown mail command.");
+        }
     }
 }
 

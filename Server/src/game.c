@@ -7,6 +7,9 @@
 #include <sys/types.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
+
+#include <dirent.h>
+
 #ifdef HAS_OPENSSL
 #include <openssl/sha.h>
 #include <openssl/evp.h>
@@ -90,6 +93,199 @@ int reserved;
  * execution
  */
 
+ATRCACHE *atrcache_head;
+
+/* Set totem reservation values */
+void
+set_totem_reserved( int i_slot, int i_val ) {
+   if ( (i_slot >= 0) && (i_slot < TOTEM_SLOTS) )
+      mudconf.totem_reserved[i_slot] = (i_val ? 1 : 0);
+}
+
+/* Initialize totem reservation slots */
+void
+init_totemreservations( void ) {
+   int i_slots;
+
+   for ( i_slots = 0; i_slots < TOTEM_SLOTS; i_slots++ ) {
+      mudconf.totem_reserved[i_slots] = 0;
+   }
+
+   /* Add hardcode reservations here */
+   set_totem_reserved(9, 1);
+}
+
+#define MAXTZONES 1000
+char *global_timezones[MAXTZONES] = {'\0'};
+int global_timezone_max = 0;
+
+/* Initialize timezone data for the server */
+int
+walk_subdirs( char *s_dir, char *s_dir2, char *prefix, int *i_cnt)
+{
+   DIR *dir;
+   FILE *fp;
+   char *t_buff, *t_buff2, *s_dirt; 
+   static char s_tst[3];
+   struct dirent *files;
+   struct stat st_buf;
+
+   dir = opendir(s_dir);
+   s_dirt = s_dir;
+   memset(s_tst, '\0', sizeof(s_tst));
+
+   if ( dir == NULL ) {
+      if ( s_dir2 && *s_dir2 ) {
+         dir = opendir(s_dir2);
+      }
+      if ( dir == NULL ) {
+         STARTLOG(LOG_ALWAYS, "TZ", "INFO")
+            log_text((char *) "File path not found.");
+         ENDLOG
+         return 1;
+      }
+      s_dirt = s_dir2;
+   }
+
+   t_buff = alloc_mbuf("walk_subdirs");
+   t_buff2 = alloc_mbuf("walk_subdirs");
+   while ( (files = readdir(dir)) != NULL ) {
+      if ( *i_cnt >= (MAXTZONES - 1) ) {
+         STARTLOG(LOG_ALWAYS, "TZ", "INFO")
+            log_text((char *) "More than maximum zones found.");
+         ENDLOG
+         break;
+      }
+      if ( (strcmp(files->d_name, ".") != 0) && (strcmp(files->d_name, "..") != 0) ) {
+         sprintf(t_buff2, "%s/%s", s_dirt, files->d_name);
+         stat(t_buff2, &st_buf);
+         if ( st_buf.st_mode & S_IFDIR ) {
+            sprintf(t_buff, "%s/", files->d_name);
+            walk_subdirs(t_buff2, (char *)NULL, t_buff, i_cnt);
+         }
+
+         /* Let's validate the file as a TZ file */
+         fp = fopen(t_buff2, "r");
+         if ( fp ) {
+            fread( &s_tst, 2, 1, fp );
+            fclose(fp);
+            if ( strcmp(s_tst, "TZ") ) {
+               continue;
+            }
+         } else {
+            continue;
+         }
+                 
+         global_timezones[*i_cnt] = alloc_mbuf("init_timezones");
+         if ( *prefix ) {
+            sprintf(global_timezones[*i_cnt], "%s%.*s", prefix, MBUF_SIZE - 1, files->d_name);
+         } else {
+            sprintf(global_timezones[*i_cnt], "%.*s", MBUF_SIZE - 1, files->d_name);
+         }
+         (*i_cnt)++;
+      }
+   }
+   free_mbuf(t_buff);
+   free_mbuf(t_buff2);
+   return 0;
+}
+
+/* Validate timezones -- this ovewrites inbuffer with case-sensitive version */
+int
+validate_timezones( char *s_timezone ) {
+   char **s_ptr, *s_inptr;
+   static char s_tmp[SBUF_SIZE+1];
+   int i_found;
+
+   i_found = 0;
+   memset(s_tmp, '\0', SBUF_SIZE + 1);
+   if ( s_timezone && *s_timezone ) {
+      strncpy(s_tmp, s_timezone, SBUF_SIZE - 1);
+   }
+
+   if ( s_tmp && *s_tmp ) {
+      s_inptr = s_tmp;
+      while ( *s_inptr ) {
+         if ( (*s_inptr == '+') || (*s_inptr == '-') ) {
+            *s_inptr = '\0';
+            break;
+         }
+         s_inptr++;
+      }
+      for ( s_ptr = global_timezones; s_ptr && *s_ptr; s_ptr++ ) {
+         if ( !stricmp(*s_ptr, s_tmp) ) {
+            /* This is a compare -- the buffer will never be exceeded */
+            strncpy(s_timezone, *s_ptr, strlen(*s_ptr));
+            i_found = 1;
+            break;
+         }
+      }
+   }
+   return(i_found);
+}
+
+void
+init_timezones( void ) {
+   int i_cnt, i_err;
+
+   i_cnt = 0;
+   i_err = walk_subdirs((char *)"/usr/share/zoneinfo/posix", (char *)"/usr/share/zoneinfo", (char *)"", &i_cnt);
+
+   if ( !i_err ) {
+      STARTLOG(LOG_ALWAYS, "TZ", "INFO")
+         log_text((char *) "A total of ");
+         log_number(i_cnt);
+         log_text((char *) " timezones have been loaded.");
+      ENDLOG
+   }
+   global_timezone_max = i_cnt;
+}
+
+void
+init_atrcache( void ) {
+   int i_cnt;
+   ATRCACHE *cp, *cpnext;
+
+   cpnext = NULL;
+   for ( i_cnt = 0; i_cnt < mudconf.atrcachemax; i_cnt++ ) {
+      cp = (ATRCACHE *) malloc(sizeof(ATRCACHE));
+      cp->name = NULL;
+      cp->s_cache = NULL;
+      cp->s_cachebuild = NULL;
+      cp->i_interval=3600;
+      cp->i_lastrun=0;
+      cp->owner = 1;
+      cp->visible = 0;
+      cp->lock = 1;
+      cp->enabled=0;
+      cp->next = NULL;
+      cp->commandtrig = 0;
+      if ( !atrcache_head ) {
+           atrcache_head = cp;
+      } else {
+         for (cpnext = atrcache_head; cpnext->next; cpnext = cpnext->next);
+         cpnext->next = cp;
+      }
+   }
+   STARTLOG(LOG_ALWAYS, "ATC", "INFO")
+      log_text((char *) "AtrCache: Initialized with ");
+      log_number(mudconf.atrcachemax);
+      log_text((char *) " total caches.");
+   ENDLOG
+}
+
+void
+reset_atrcache_commandtrig( void ) {
+   ATRCACHE *cp;
+
+   for (cp = atrcache_head; cp->next; cp = cp->next) {
+      if ( cp->enabled )
+         cp->commandtrig = 1;
+      else
+         cp->commandtrig = 0;
+   }
+}
+
 void
 setq_templates(dbref thing)
 {
@@ -115,6 +311,7 @@ setq_templates(dbref thing)
             if ( s_intok2 && *s_intok2 ) {
 #ifdef EXPANDED_QREGS
                if ( isalpha(*c_field) ) {
+                  /* MAX_GLOBAL_REGS only */
                   for ( i = 0; i < MAX_GLOBAL_REGS; i++ ) {
                      if ( mudstate.nameofqreg[i] == tolower(*c_field) )
                         break;
@@ -223,8 +420,8 @@ atr_match1(dbref thing, dbref parent, dbref player, char type,
     int match, attr, aflags, i, ck, ck2, ck3, loc, attrib2, x, i_cpuslam, 
         do_brk, aflags_set, oldchk, chkwild, i_inparen;
     char *buff, *s, *s2, *s3, *as, *s_uselock, *atext, *result, buff2[LBUF_SIZE+1];
-    char *args[10], *savereg[MAX_GLOBAL_REGS], *pt, *cpuslam, *cputext, *cpulbuf,
-         *saveregname[MAX_GLOBAL_REGS], *npt;
+    char *args[10], *savereg[MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST], *pt, *cpuslam, *cputext, *cpulbuf,
+         *saveregname[MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST], *npt;
     ATTR *ap, *ap2;
 
     DPUSH; /* #70 */
@@ -364,7 +561,7 @@ atr_match1(dbref thing, dbref parent, dbref player, char type,
                         aflags_set = ap2->number;
                         if ( atext ) {
                            if ( !(attrib2 & AF_NOPROG) ) {
-                              for (x = 0; x < MAX_GLOBAL_REGS; x++) {
+                              for (x = 0; x < (MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST); x++) {
                                  savereg[x] = alloc_lbuf("ulocal_reg");
                                  saveregname[x] = alloc_sbuf("ulocal_regname");
                                  pt = savereg[x];
@@ -394,7 +591,7 @@ atr_match1(dbref thing, dbref parent, dbref player, char type,
                                  atr_set_flags(parent, aflags_set, (attrib2 | AF_NOPROG) );
                               }
                               free_lbuf(cputext);
-                              for (x = 0; x < MAX_GLOBAL_REGS; x++) {
+                              for (x = 0; x < (MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST); x++) {
                                  pt = mudstate.global_regs[x];
                                  npt = mudstate.global_regsname[x];
                                  safe_str(savereg[x],mudstate.global_regs[x],&pt);
@@ -937,8 +1134,8 @@ notify_check(dbref target, dbref sender, const char *msg, int port, int key, int
                  s_pipeattr2 = alloc_lbuf("speech_cpu");
                  sprintf(s_pipeattr2, "%.*s", (LBUF_SIZE - 100), s_pipeattr);
                  if ( Good_chk(mudstate.posesay_dbref) && 
-	              ( !(Wizard(mudstate.posesay_dbref) || HasPriv(mudstate.posesay_dbref, target, POWER_WIZ_SPOOF, POWER5, NOTHING)) || 
-                        Immortal(target) || Spoof(mudstate.posesay_dbref) || Spoof(Owner(mudstate.posesay_dbref)) ) ) {
+	                  CANSEE(target,mudstate.posesay_dbref) && !HasPriv(mudstate.posesay_dbref, target, POWER_WIZ_SPOOF, POWER5, NOTHING) && 
+                        !Spoof(mudstate.posesay_dbref) && !Spoof(Owner(mudstate.posesay_dbref)) ) {
                     sprintf(vap[3], "#%d", mudstate.posesay_dbref);
                    
                     /* Replace @N/@n and @K/@k with name and colorname */
@@ -1041,8 +1238,8 @@ notify_check(dbref target, dbref sender, const char *msg, int port, int key, int
                  s_pipeattr2 = alloc_lbuf("speech_cpu");
                  sprintf(s_pipeattr2, "%.*s", (LBUF_SIZE - 100), s_pipeattr);
                  if ( Good_chk(mudstate.posesay_dbref) && 
-	              ( !(Wizard(mudstate.posesay_dbref) || HasPriv(mudstate.posesay_dbref, target, POWER_WIZ_SPOOF, POWER5, NOTHING)) || 
-                        Immortal(target) || Spoof(mudstate.posesay_dbref) || Spoof(Owner(mudstate.posesay_dbref)) ) ) {
+	                 CANSEE(target,mudstate.posesay_dbref) && !HasPriv(mudstate.posesay_dbref, target, POWER_WIZ_SPOOF, POWER5, NOTHING) && 
+                        !Spoof(mudstate.posesay_dbref) && !Spoof(Owner(mudstate.posesay_dbref)) )  {
                     sprintf(vap[3], "#%d", mudstate.posesay_dbref);
 
                     /* Replace @N/@n and @K/@k with name and colorname */
@@ -2296,31 +2493,14 @@ NDECL(process_preload)
     fp = (FWDLIST *) alloc_lbuf("process_preload.fwdlist");
     tstr = alloc_lbuf("process_preload.string");
     tstr2 = alloc_lbuf("process_preload.string");
-    DO_WHOLE_DB(thing) {
 
-       /* Ignore GOING objects */
+    /* We need to walk once through to set up all attribute tags and other things
+     * we do not need need to execute queue for this, it's just setting up attribs/cache
+     * we can *not* do any evaluation in this loop.  This just sets cache/attributes ONLY
+     */
+    DO_WHOLE_DB(thing) {
        if (Going(thing))
           continue;
-
-       do_top(10);
-
-
-       /* Clear semaphores on objects */
-       /* atr_clr(thing, A_SEMAPHORE); */
-
-       /* Look for a STARTUP attribute in parents */
-       if ( !mudconf.no_startup ) {
-          ITER_PARENTS(thing, parent, lev) {
-             if (Flags(thing) & HAS_STARTUP) {
-                did_it(Owner(thing), thing, 0, NULL, 0, NULL, A_STARTUP, (char **) NULL, 0);
-                /* Process queue entries as we add them */
-                do_second();
-                do_top(10);
-                cache_reset(0);
-                break;
-             }
-          }
-       }
 
        /* Load the memory based structure data for Totems A_PRIVS is *Totems */
        (void) atr_get_str(tstr, thing, A_PRIVS, &aowner, &aflags);
@@ -2362,17 +2542,6 @@ NDECL(process_preload)
           }
        }
 
-       /* Look for a FORWARDLIST attribute */
-       if (H_Fwdlist(thing)) {
-          (void) atr_get_str(tstr, thing, A_FORWARDLIST, &aowner, &aflags);
-          if (*tstr) {
-             fwdlist_load(fp, GOD, tstr);
-             if (fp->count > 0)
-                fwdlist_set(thing, fp);
-          }
-          cache_reset(0);
-       }
-
        /* Look for an OBJECTTAG attribute */
        if (H_ObjectTag(thing)) {
           (void) atr_get_str(tstr, thing, A_OBJECTTAG, &aowner, &aflags);
@@ -2390,6 +2559,45 @@ NDECL(process_preload)
              }
           }
        }
+    }
+
+    /* This runs the startups and other baseline */
+    DO_WHOLE_DB(thing) {
+       /* Ignore GOING objects */
+       if (Going(thing))
+          continue;
+
+       do_top(10);
+
+
+       /* Clear semaphores on objects */
+       /* atr_clr(thing, A_SEMAPHORE); */
+
+       /* Look for a STARTUP attribute in parents */
+       if ( !mudconf.no_startup ) {
+          ITER_PARENTS(thing, parent, lev) {
+             if (Flags(thing) & HAS_STARTUP) {
+                did_it(Owner(thing), thing, 0, NULL, 0, NULL, A_STARTUP, (char **) NULL, 0);
+                /* Process queue entries as we add them */
+                do_second();
+                do_top(10);
+                cache_reset(0);
+                break;
+             }
+          }
+       }
+
+       /* Look for a FORWARDLIST attribute */
+       if (H_Fwdlist(thing)) {
+          (void) atr_get_str(tstr, thing, A_FORWARDLIST, &aowner, &aflags);
+          if (*tstr) {
+             fwdlist_load(fp, GOD, tstr);
+             if (fp->count > 0)
+                fwdlist_set(thing, fp);
+          }
+          cache_reset(0);
+       }
+
     }
 
     free_lbuf(fp);
@@ -2457,6 +2665,9 @@ main(int argc, char *argv[])
     pool_init(POOL_QENTRY, sizeof(BQUE));
     pool_init(POOL_ZLISTNODE, sizeof(ZLISTNODE));
 
+    pool_init(POOL_ATRCACHE, LBUF_SIZE);
+    pool_init(POOL_ATRNAME, SBUF_SIZE);
+
     init_pid_table();
     tcache_init();
     pcache_init();
@@ -2480,6 +2691,7 @@ main(int argc, char *argv[])
 #ifdef ENABLE_DOORS
     initDoorSystem();
 #endif
+    init_totemreservations();
     hashinit(&mudstate.player_htab, 521);
     hashinit(&mudstate.objecttag_htab, 1024);
     nhashinit(&mudstate.fwdlist_htab, 131);
@@ -2488,6 +2700,8 @@ main(int argc, char *argv[])
 #ifdef HAS_OPENSSL
     OpenSSL_add_all_digests();
 #endif
+    /* Read in timezone data before the config files */
+    init_timezones();
     /* Clean the conf to avoid naughtiness */
     unlink("rhost_vattr.conf");
 
@@ -2533,6 +2747,8 @@ main(int argc, char *argv[])
 
     fcache_init();
     helpindex_init();
+
+    init_atrcache();
 
 #ifndef NODEBUGMONITOR
     debugmem = shmConnect(mudconf.debug_id, 0, &shmid);   
@@ -2610,7 +2826,7 @@ main(int argc, char *argv[])
     set_signals();
 
     /* initialize the buffers and variables */
-    for (mindb = 0; mindb < MAX_GLOBAL_REGS; mindb++) {
+    for (mindb = 0; mindb < (MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST); mindb++) {
 	mudstate.global_regs[mindb] = alloc_lbuf("main.global_reg");
 	mudstate.global_regsname[mindb] = alloc_sbuf("main.global_regname");
 	mudstate.global_regs_backup[mindb] = alloc_lbuf("main.global_regbkup");

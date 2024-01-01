@@ -35,6 +35,7 @@ CMD_TWO_ARG_CMDARG(do_aflags);
 CMD_TWO_ARG(do_alias);			/* Change the alias of something */
 CMD_TWO_ARG(do_areg);
 CMD_TWO_ARG(do_attribute);		/* Manage user-named attributes */
+CMD_TWO_ARG_CMDARG(do_atrcache);	/* Force someone to do something */
 CMD_ONE_ARG(do_blacklist);		/* Load/Clear/List blacklist.txt file */
 CMD_ONE_ARG(do_boot);			/* Force-disconnect a player */
 CMD_TWO_ARG_CMDARG(do_break);
@@ -135,6 +136,7 @@ CMD_TWO_ARG_ARGV(do_mvattr);		/* Move attributes on object */
 CMD_TWO_ARG(do_mudwho);			/* WHO for inter-mud page/who support */
 CMD_TWO_ARG(do_name);			/* Change the name of something */
 CMD_TWO_ARG(do_newpassword);		/* Change passwords */
+CMD_TWO_ARG(do_flaglevel); /* @flaglevel */
 CMD_TWO_ARG(do_notify);			/* Notify or drain semaphore */
 CMD_ONE_ARG(do_nuke);
 CMD_TWO_ARG_ARGV(do_open);		/* Open an exit */

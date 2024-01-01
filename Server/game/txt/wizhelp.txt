@@ -543,14 +543,15 @@
   CUSTOMIZED CONNECT       DEBUG FEATURES           DEPOWER LIST           
   ELSEFILE SETUP           FILES                    FLAGS                  
   FLAG ALIAS               FUNCTION OVERLOADING     GLOBAL INHERITANCE     
-  GUEST SETUP              HELP SETUP               HOOK SETUP             
-  HUH SETUP                INHERITANCE              LOGGING                
-  MAIL ALIASES             MASTER ROOM              MOGRIFY                
-  NEWS SETUP               PERMISSIONS              PLUSHELP SETUP         
-  POWER LIST               PROXY SETUP              REALITY LEVELS         
-  SEARCH CRITERIA          SIGNALS                  SITE LISTS             
-  SPECIAL ATTRIBS          SSL SETUP                TAGS                   
-  TOGGLES                  TOR                      TOTEMS
+  GUEST SETUP              HELPINC                  HELP SETUP 
+  HOOK SETUP               HUH SETUP                INHERITANCE            
+  LOGGING                  MAIL ALIASES             MASTER ROOM            
+  MOGRIFY                  NEWS SETUP               PERMISSIONS            
+  PLUSHELP SETUP           POWER LIST               PROXY SETUP            
+  REALITY LEVELS           SEARCH CRITERIA          SIGNALS                
+  SITE LISTS               SPECIAL ATTRIBS          SSL SETUP              
+  TAGS                     TOGGLES                  TOR                    
+  TOTEMS
 
 & API
   Topic: API
@@ -606,9 +607,31 @@
   
 { see 'wizhelp api setup' for steps on how to set up a dbref# for use }
 { see 'wizhelp api processing' to see how to actually use the API system }
+{ see 'wizhelp api headers' to see all the available headers for API }
 { see 'wizhelp api return' for values you can expect back from the API }
 { see 'wizhelp api errorcodes' for HTTP error codes that it can respond with }
+{ see 'wizhelp api commands' for mush based commands used for the API }
 
+& GET
+& POST
+& HEAD
+& PUT
+& API TIMEOUT
+& API COMMANDS
+  Topic: API COMMANDS
+  
+  The following commands are used by the API engine.
+  PUT/HEAD    -- push info to the mush from the client
+  GET/POST    -- pull info from the mush to the client
+  
+  Note: You may have multiple GET and POST responses in a single connection.
+        To utilize this specify -H "Keep-Alive: timeout=xx" where 'XX' is
+        the desired connection value (1-300)
+  
+  To restrict these commands you may use the 'logout_cmd_access' config.
+  
+  See Also: api, logout_cmd_access
+  
 & API SETUP
   Topic: API SETUP
   
@@ -638,8 +661,9 @@
 { see 'wizhelp api return' for values you can expect back from the API }
 { see 'wizhelp api errorcodes' for HTTP error codes that it can respond with }
 
+& API HEADERS
 & API PROCESSING
-  Topic: API PROCESSING
+  Topic: API PROCESSING/API HEADERS
   
   To actually execute an API request, you need to send a web request to the 
   API handler.  The API handler handles two request types.  POST and GET.
@@ -649,6 +673,9 @@
   
   The following headers are available with the following options:
   POST:
+     header - Exec64:
+       -- This works just like Exec but expects an base64 format input.
+          This will always have priority over Exec.
      header - Exec:
        -- The Exec: header is used to tell the mush what code to execute.
           You would encapsulate the code you want to run in double quotes.
@@ -661,8 +688,17 @@
           If a negative value is fed to this, it defaults to '0'.  You may
           use fractional values.
           Example:  Time: "100.5"
+     header - Keep-Alive:
+       -- Maximum value handled by 'max_api_timeout'
+          The value expected after this is 'timeout=XX' where XX is the
+          number of seconds the connection is expected to remain.  Closing
+          the socket will immediately close the connection.  Default 1s.
+          Example: -H "Keep-Alive: timeout=20"
   
   GET:
+     header - Exec64:
+       -- This works just like Exec but expects an base64 format input.
+          This will always have priority over Exec.
      header - Exec:
        -- The Exec: header is used to tell the mush what code to execute.
           Unlike the POST requester, this only accepts functions/strings.
@@ -682,6 +718,12 @@
           Options you can pass this is 'yes' to enable, and 'no' to disable.
           No is the default value.  This is handy when you have multi-line
           input that headers may not necessarily handle.
+     header - Keep-Alive:
+       -- Maximum value handled by 'max_api_timeout'
+          The value expected after this is 'timeout=XX' where XX is the
+          number of seconds the connection is expected to remain.  Closing
+          the socket will immediately close the connection.  Default 1s.
+          Example: -H "Keep-Alive: timeout=20"
   
 { see 'wizhelp api setup' for steps on how to set up a dbref# for use }
 { see 'wizhelp api return' for values you can expect back from the API }
@@ -726,6 +768,12 @@
   
   POST Example: (this is from a command line using the 'curl' application)
 > curl -X POST --user "#12:ya" -H "Exec: @emit hi." --head http://localhost:2222
+  
+  MIXED KeepAlive Example: (again from the curl application)
+> curl -X GET --user "#12:ya" -H "Keep-Alive: 20" -H "Exec: [lnum(10)]" 
+    --head http://localhost:2222 --next -X GET --user "#12:ya" 
+    -H "Exec: [lnum(20)]" --head http://localhost:2222 --next -X POST 
+    --user "#12:ya" -H "Exec: @emit [lwho()]" --head http://localhost:2222
   
   See Also: @api 
    
@@ -1126,19 +1174,34 @@
   global object to handle 'content locks'.  This is done through the config
   parameter 'global_attrdefault'.  Once a valid dbref# is identified, then
   the content (evaluated) of the attribute is matched against what is
-  being set.  What is being set is passed as %0 to the attribute.  If it
-  returns '1' then the attribute is allowed to be set.  If it returns '0'
-  then the attribute can not be set.
+  being set.  If it returns '1' then the attribute is allowed to be set.  
+  If it returns '0' then the attribute can not be set.
+  
+  The attribute you intend to have processed with content locking is the
+  same attribute that you set on the global_attrdefault object.  For
+  example, if you wish to have the 'Sex' attribute be locked to just
+  Male and Female, you would set the lock mechanism on the attribute
+  'Sex' on the global_attrdefault object.
+   
+  The following arguments can be passed to the attribute processing
+  the lock:
+      %0    - the contents being set to the attribute
+      %1    - the target the attribute is  being set upon
+      %#/%@ - the global_attrdefault object
+      %!    - the enactor setting the attribute
   
   Any attribute you want to possess attribute content locks must be set 
   ATRLOCK.  You may set this globally on an attribute.
   
-  Note:  Any local flags on an attribute WILL BE CLEARED if you @cpattr or
-         @mvattr into that attribute.  (they will be overwritten with
-         the flags on the attribute being copied.  This is the
-         intended behavior).  If you wish for the attributes to hold
-         their flags, you must either globally set the flags, or reset
-         the flags locally after the @mvattr or @cpattr.
+  Example:
+    > @create Attrib Locker
+    > think num(attrib locker)
+      #123
+    > @admin global_attrdefault=123
+    > &player_age global_attrdefault=[between(18,100,%0,1)] 
+    > @attribute/access player_age=atrlock
+    > &ROOMONLY global_attrdefault=[hastype(%1,room)]
+    > @attribute/access roomonly=atrlock
     
   See Also: ATRLOCK, global_attrdefault
   
@@ -2241,7 +2304,7 @@
   methods to garner outside shell access but extreme caution should
   be used in using this anyway.
   
-  See Also: execscript()
+  See Also: execscript(), execscripthome
 
 & POWER FULLTEL
   Power argument: @power[/switch] <user>=[@g|@a|@c] fulltel
@@ -2581,13 +2644,23 @@
   cpuintervalchk and cputimechk accordingly or your job will not run 
   properly.
 
+& co
+& cc
 & cd
   The cd command is only used on the connect screen.  This will
   connect the staff into the RhostMUSH with the DARK and UNFINDABLE
   flag. (The staff inherit any special abilities from both of
   these flags if they're able)
   
+  cd -- connect dark
+  cc -- connect cloaked
+  co -- normal connect
+   
   Example:  (on the connect screen)  cd myplayer mypassword
+  
+  To restrict these commands, please use the 'connect_perm' config.
+  
+  See Also: connect_perm, logout_cmd_access
 
 & channel
   The wizards have extra mobility with the channel system by the
@@ -2684,10 +2757,13 @@
                     h - idle unfindable $ - SSL connected
      Host         - The Internet host name or address from where the player 
                     has connected.  This can be cut off with 'whohost_size'
-
+  
   Example: WHO Nyc
   
-  See Also: SESSION, DOING, @conncheck.
+  To change access permissions of this command, please refer to the config
+  parameter 'logout_cmd_access'.
+  
+  See Also: SESSION, DOING, @conncheck, logout_cmd_access
 
 & DOING
   Command: DOING <prefix>
@@ -2706,8 +2782,11 @@
    
   Example:  DOING Nyc
   
+  To change access permissions of this command, please refer to the config
+  parameter 'logout_cmd_access'.
+  
   See Also: SESSION, WHO, DARK, UNFINDABLE, SUSPECT, idle_wiz_dark,
-            idle_wiz_cloak
+            idle_wiz_cloak, logout_cmd_access
 
 & wizhelp
   Command: wizhelp <topic>
@@ -2781,18 +2860,23 @@
 
 & @attribute
   Command: @attribute[/<switch>] <attrib>[=<value>]
+           @attribute[/<switch>] <page #>
   
   Performs operations on user-named attributes depending on the switch used.
   The following switches are available:
-     /access   - Changes the access to the named attribute.  <value> is a
-                 space-separated list of permissions to add or remove from
-                 the attribute's access permissions.
-     /delete   - Removes the named attribute from the attribute table.
-                 This switch does not remove instances of the attribute from
-                 objects, and any that remain will be renamed to the 
-                 user-named attribute that re-uses the attribute number
-                 of the deleted attribute.
-     /rename   - Changes the name of the named attribute to <value>.
+     /access    - Changes the access to the named attribute.  <value> is a
+                  space-separated list of permissions to add or remove from
+                  the attribute's access permissions.
+     /delete    - Removes the named attribute from the attribute table.
+                  This switch does not remove instances of the attribute from
+                  objects, and any that remain will be renamed to the 
+                  user-named attribute that re-uses the attribute number
+                  of the deleted attribute.
+     /rename    - Changes the name of the named attribute to <value>.
+     /loadcache - using the second option, loads the first 100,000 attributes
+                  that can be reused.
+     /showcache - using the second option, shows the given page of attributes
+                  that are to be reused.  This is attribute ID numbers only.
  
   After completion of this command you will be presented with the
   current permissions list for the attribute in question (not /delete).
@@ -2811,7 +2895,7 @@
   
   Example:  @attribute/access wiz_only_attribute=royalty pinvisible
   
-  See Also: attr_access
+  See Also: attr_access, vattr_interval, @enable, @disable
  
 & @cmdquota
   Command: @cmdquota[/<switch>] <player|port> = <1-99999>
@@ -2875,6 +2959,8 @@
 
 & @site
   Command: @site[/switch] <site>=<mask>
+  
+  This will remove sites listed in @list site_information.
   
   This command takes site and mask information just as @admin would for
   permit_site, register_site, forbid_site, and noguest.  However, instead
@@ -3166,22 +3252,25 @@
   
   Turns off the indicated RhostMUSH runtime parameter.  The following 
   parameters may be turned off:
-    building      - Allows players to use the building commands.
-    checkpointing - Enables periodic database checkpoint dumping.
-    cleaning      - Enables periodic scanning of the database for rooms
-                    to be destroyed.
-    dequeueing    - Allows commands to be removed from the queue and
-                    executed.
-    idlechecking  - Enables periodic checking for and booting of idle
-                    players.
-    interpret     - Enables execution of commands that place commands
-                    on the queue.
-    local_rwho    - Enables the RWHO command for querying a remote RWHO
-                    server.
-    logins        - Allows nonwizard players to connect to their characters.
-    transmit_rwho - Enables transmission of player data to a remote RWHO
-                    server.
-  These parameters are all enabled by default.
+   0x0001  logins        - Allows nonwizard players to connect to their 
+                           characters.
+   0x0002  building      - Allows players to use the building commands.
+   0x0004  interpret     - Enables execution of commands that place commands
+                           on the queue.
+   0x0008  checkpointing - Enables periodic database checkpoint dumping.
+   0x0010  cleaning      - Enables periodic scanning of the database for rooms
+                           to be destroyed.
+   0x0020  idlechecking  - Enables periodic checking for and booting of idle
+                           players.
+   0x0040  transmit_rwho - Enables transmission of player data to a remote RWHO
+                           server.
+   0x0080  local_rwho    - Enables the RWHO command for querying a remote RWHO
+                           server.
+   0x0100  dequeueing    - Allows commands to be removed from the queue and
+                           executed.
+   0x0200  vattrchecking - Enables the attribute cache reuse feature
+  
+  These parameters, other than vattrchecking,  are all enabled by default.
   
   Example:  @disable logins
   
@@ -3224,22 +3313,25 @@
   
   Turns on the indicated RhostMUSH runtime parameter.  The following 
   parameters may be turned on:
-    building      - Allows players to use the building commands.
-    checkpointing - Enables periodic database checkpoint dumping.
-    cleaning      - Enables periodic scanning of the database for rooms
-                    to be destroyed.
-    dequeueing    - Allows commands to be removed from the queue and
-                    executed.
-    idlechecking  - Enables periodic checking for and booting of idle
-                    players.
-    interpret     - Enables execution of commands that place commands
-                    on the queue.
-    local_rwho    - Enables the RWHO command for querying a remote RWHO
-                    server.
-    logins        - Allows nonwizard players to connect to their characters.
-    transmit_rwho - Enables transmission of player data to a remote RWHO
-                    server.
-  These parameters are all enabled by default.
+   0x0001  logins        - Allows nonwizard players to connect to their 
+                           characters.
+   0x0002  building      - Allows players to use the building commands.
+   0x0004  interpret     - Enables execution of commands that place commands
+                           on the queue.
+   0x0008  checkpointing - Enables periodic database checkpoint dumping.
+   0x0010  cleaning      - Enables periodic scanning of the database for rooms
+                           to be destroyed.
+   0x0020  idlechecking  - Enables periodic checking for and booting of idle
+                           players.
+   0x0040  transmit_rwho - Enables transmission of player data to a remote RWHO
+                           server.
+   0x0080  local_rwho    - Enables the RWHO command for querying a remote RWHO
+                           server.
+   0x0100  dequeueing    - Allows commands to be removed from the queue and
+                           executed.
+   0x0200  vattrchecking - Enables the attribute cache reuse feature
+  
+  These parameters, other than vattrchecking,  are all enabled by default.
   
   Example:  @enable logins
   
@@ -3457,12 +3549,13 @@
  
     advbuffers      allocations       attr_permissions  attributes 
     bad_names       buffers           commands          config_permissions
-    costs           db_stats          default_flags     flags             
-    functions       funperms          globals           hashstats         
-    logging         options           permissions       process         
-    site_info       switches          user_attributes   toggles         
-    mail_globals    guest_names      *rlevels           cmdslogged      
-    powers          depowers         *stacks            vattrcmds
+    costs           cmdslogged        depowers          db_stats        
+    default_flags   default_toggles   flags             functions       
+    funperms        globals           guest_names       hashstats     
+    logging         mail_globals      options           permissions   
+    powers          process          *rlevels           site_info     
+   *stacks          switches          toggles           user_attributes   
+    vattrcmds
  
   Type wizhelp @list <option> for help with a particular option.
   
@@ -3531,11 +3624,36 @@
                  queue. (@wait, @trigger, @switch, @dolist, etc).
     Pcaches    - Total number of cache entries of players.
     ZListNodes - Zone buffers, used to hold the zone linking information.
+    AtrCache   - lbufs specific for attribute execution caches (contents)
+    AtrName    - sbufs specific for attribute execution caches (names)
    
+  For a breakdown of all the segments under the allocations, refer to:
+  
+  Following suboptions are available to @list alloc:
+       quick, blacklist, attrib, totem, cache, network, db, or stack
+  
+  { @list allocations2 }
+  
+& @list allocations2
+  Command: @list allocations (continued)
+  
   Information is given for current Tprintf dynamic allocation buffers:
     Current    - Current allocated dynamic (unsafe_tprintf) buffers
     Maximum    - Current maximum ever allocated
     Average    - Average allocated over period of time
+  
+  Total Overhead Totems & AtrCaches
+    Size       - Size of the structure
+    Slots      - number of entries
+    Objects    - the multiplier for slots (if shown)
+    Total Mem  - Total memory used
+  
+  Information is given for the blacklist states:
+     NoDNS     - Blacklist denying reverse DNS lookup on sites
+     Black     - The full forbid blacklist for the site
+     Size      - Size of the blacklist
+     InUse     - How many are being currently used
+     Total Mem - Total memory each blacklist will use.
   
   Information is given for total network usage:
     Total-In   - Total bytes of all inbound traffic for current reboot
@@ -3639,13 +3757,23 @@
   
   Lists statistics for the database cache.
 
+& @list default_toggles
+  Command: @list default_toggles
+  
+  Lists the toggles that are automatically given to players, things, rooms,
+  exits, and robots when they are created.
+  
+  See Also: default_flags, player_toggles, thing_toggles, room_toggles, 
+            exit_toggles, robot_toggles.
+
 & @list default_flags
   Command: @list default_flags
   
   Lists the flags that are automatically given to players, things, rooms,
   exits, and robots when they are created.
   
-  See Also: player_flags, thing_flags, room_flags, exit_flags, robot_flags.
+  See Also: default_toggles, player_flags, thing_flags, room_flags, 
+            exit_flags, robot_flags.
 
 & @list flags
   Command: @list flags
@@ -3695,11 +3823,14 @@
                     to connect.
     transmit_rwho - Indicates whether or not user information is to be
                     periodically sent to the configured remote RWHO server.
+    vattrchcking  - Indicates whether or not the attribute re-use cache
+                    is enabled or not.  If enabled it reuses deleted attribs.
   
   See Also: RWHO, @dbck, @disable, @enable, @kick, @list permissions, @purge,
             @timewarp, checkpoint, conn_timeout, dump_interval, dump_offset,
             idle_interval, idle_timeout, rwho_data_port, rwho_dump_interval,
-            rwho_host, rwho_info_port, rwho_password, rwho_transmit.
+            rwho_host, rwho_info_port, rwho_password, rwho_transmit,
+            vattr_interval.
 
 & @list hashstats
   Command: @list hashstats
@@ -3791,6 +3922,7 @@
     mysql          - list MySQL parameters (if enabled)
     convtime       - list convtime extended formats
     display        - display target config parameter ( works like config() )
+    timers         - list the current timers for the mush (Guildmaster+ only)
   
   Individual help is available on each sub option.
    
@@ -3915,6 +4047,14 @@
  
   See Also: config(), @list options 
 
+& @list options timers
+  Config Subtopic: @list options timers
+  
+  This will show the current db and system related timers and when they
+  are expected to trigger next.
+  
+  See Also: @list options
+  
 & @list permissions
   Command: @list permissions
   
@@ -3927,88 +4067,115 @@
   Command: @list powers
   
   Lists the access restrictions on the various powers
+    api             - Target is allowed to be used as an API handler
+    boot            - Players may use the @boot power on other to level
     change_quotas   - Player may change the building quotas of others.
-    chown_mine      - Player may @chown objects to yourself even if not
+    chown_anywhere  - Players may @chown anything remotely.
+    chown_me        - Player may @chown objects to yourself even if not
                       CHOWN_OK.
-    chown_others    - Player may @chown objects you control to others.
+    chown_other     - Player may @chown objects you control to others.
+    examine_all     - Players may examine everything based on level.
+    examine_full    - Player can examine anything.
+    execscript      - Player has permission to use execscript() function.
     expanded_who    - WHO report includes additional information about the 
                       players listed.
+    formatting      - Target passes %0-%4 args to attribute formats.
     free_money      - All commands are free.
+    free_page       - Page costs no money for player (if cost enabled).
     free_quota      - Quotas are ignored for this player.
+    free_wall       - Players may @wall and do so for free.
+    fulltel         - Player can @teleport anywhere.
     grab_player     - Player may @tel any other player to themselves.
+    halt_queue      - Player may halt the queue of specified level.
+    halt_queue_all  - Player may halt the entire queue including by PID.
+    hidebit         - Player's staff bit is hidden.
     join_player     - Player may @tel to the loc of any other player.
     long_fingers    - Player may operate on objects that normally must be
                       near the player even if they are not.
-    priv_attributes - Player may modify read-only attributes and see invisible
-                      attributes.
-    priv_flags      - Player sees and may modify privileged flags.
-    rename_myself   - Player may change his name and password.
-    see_all_queue   - Player sees entire contents of queue.
-    see_hidden      - Player sees hidden players in the WHO report.
-    stat_any        - Player may get @stats on any player.
+    monitorapi      - Players toggled MONITOR_SITE will see API connects.
+                      Warning: can be very very spammy.
+    no_boot         - Player can not be @booted to the specified level.
+    noforce         - Player can not be @forced to the specified level.
+    nokill          - Player may not be killed to the specified level.
   
 { 'wizhelp @list powers2' for more }
 & @list powers2
   Command: @list powers (continued)
   
-    steal_money     - Player may give negative money.
-    nokill          - Player may not be killed.
+    nowho           - Players may use @hide.
+    pcreate         - Players may use the @pcreate ability.
+    priv_attributes - Player may modify read-only attributes and see invisible
+                      attributes.
+    priv_flags      - Player sees and may modify privileged flags.
+    purge           - Player can use /purge switch to @nuke/@destroy.
+    rename_myself   - Player may change his name and password.
     search_any      - Player can @search/@find based on level.
     security        - Player can use some wiz flags based on level.
+    see_queue       - Player may see queue entries up to specified level.
+    see_queue_all   - Player sees entire contents of queue.
+    see_hidden      - Player sees hidden players in the WHO report.
+    shutdown        - Player may @shutdown the mush
+    stat_any        - Player may get @stats on any player.
+    steal           - Player may give negative money.
+    tel_anything    - Players may teleport anything up to bitlevel control.
+    tel_anywhere    - Players may teleport anywhere to bitlevel control.
+    use_freelist    - Players may specify free dbref#'s for create/open/etc.
+    wiz_idle        - Players can used the enhanced 'idle' command.
+    wiz_spoof       - Target can spoof as if a wizard.
+    wiz_who         - Players see site information on WHO
     who_unfind      - Player can see hidden player in WHO
     wraith          - Player can go through exits w/o passing lock.
     shutdown        - Player can shutdown the game.
-    hidebit         - Player's staff bit is hidden.
-    purge           - Player can use /purge switch to @nuke/@destroy.
-    fulltel         - Player can @teleport anywhere.
-    examine_full    - Player can examine anything.
     
   See Also: @list depowers
 
 & @list depowers
   Command: @list depowers
   
+  Note: @depowers have precedence over @power and bitlevel.
+  
   Lists the access restrictions on the various depowers
-    wall            - Player can not use @wall.
-    steal           - Player is limited on rob/steal.
-    wiz_who         - Player can't see a wiz-who.
-    boot            - Player can not use @boot.
-    force           - Player can not @fo anyone but self.
-    com             - Player can't use hardcoded comsystem.
-    master          - Player can't execute master-room code.
-    nuke            - Player can't @nuke, @turtle or @toad.
-    override        - Player can't override locks by default.
-    tel_anything    - Player can't teleport anything.
-    power           - Player can't use @power.
-    modify          - Player can't modify anything but self.
-    chown_other     - Player can't chown things to others.
-    unl_quota       - Player can't have infinite quota.
-    give            - Player can't give anything.
-    nogold          - Player is restricted on gold to give.
-    password        - Player can't use @newpassword/@password.
-    long_fingers    - Player can't access things remotely.
-    create          - Player can't @create/@open/@dig/@pcreate
-    cloak           - Player can't wizcloak/cloak.
-    page            - Player can't page.
-    locks           - Player can't pass locks.
- 
+    abuse            - Player can't use any $commands but his own.
+    boot             - Player can not use @boot.
+    chown_me         - Player can't chown things to himself.
+    chown_other      - Player can't chown things to others.
+    cloak            - Player can't wizcloak/cloak.
+    com              - Player can't use hardcoded comsystem.
+    command          - Player can't use any $commands.
+    create           - Player can't @create/@open/@dig/@pcreate
+    dark             - Player can't go dark/cloaked/wizcloaked
+    examine          - Player can't examine anything but self.
+    force            - Player can not @fo anyone but self.
+    free             - Player doesn't have free/infinite money.
+    give             - Player can't give anything.
+    locks            - Player can't pass locks.
+    long_fingers     - Player can't access things remotely.
+    master           - Player can't execute master-room code.
+    modify           - Player can't modify anything but self.
+    mortal_examine   - Player examines/decompiles/etc as a mortal.
+    nogold           - Player is restricted on gold to give.
+   
 { wizhelp @list depowers2 to continue }
 
 & @list depowers2
   Command: @list depowers (continued)
-  
-    command         - Player can't use any $commands.
-    examine         - Player can't examine anything but self.
-    free            - Player doesn't have free/infinite money.
-    tel_anywhere    - Player can't teleport anywhere.
-    pcreate         - Player can't pcreate.
-    quota           - Player can't give quota.
-    chown_me        - Player can't chown things to himself.
-    abuse           - Player can't use any $commands but his own.
-    search_any      - Player can't @search/@find things.
-    receive         - Player limited on what they can receive.
-    nosteal         - Player can't steal.
-    mortal_examine  - Player examines/decompiles/etc as a mortal.
+    nosteal          - Player can't steal.
+    nuke             - Player can't @nuke, @turtle or @toad.
+    override         - Player can't override locks by default.
+    page             - Player can't page.
+    password         - Player can't use @newpassword/@password.
+    personal_command - Player can't use $commands on things they own
+    pcreate          - Player can't pcreate.
+    power            - Player can't use @power.
+    quota            - Player can't give quota.
+    receive          - Player limited on what they can receive.
+    search_any       - Player can't @search/@find things.
+    steal            - Player is limited on rob/steal.
+    tel_anything     - Player can't teleport anything.
+    tel_anywhere     - Player can't teleport anywhere.
+    unl_quota        - Player can't have infinite quota.
+    wall             - Player can not use @wall.
+    wiz_who          - Player can't see a wiz-who.
   
   See Also: @list powers
 
@@ -4077,7 +4244,13 @@
                 NoAutoReg    - This site can not autoregister
                 Hard Connect - This site can use connect screen commands.
  
-  See Also: forbid_site, forbidapi_site, permit_site, register_site, 
+  A site may have '(AutoSite)' beside it which means that RhostMUSH has set
+  that site restricted automatically, usually through triggering protection
+  such as attempts to exceed maximum connections a minute.
+  
+  You may remove sites with the '@site' command.
+  
+  See Also: @site, forbid_site, forbidapi_site, permit_site, register_site, 
             suspect_site, trust_site, noguest_site, noautoreg_site, 
             forbid_host, suspect_host, register_host, noguest_host, 
             noautoreg_host, validate_host, hardconn_host, nobroadcast_host, 
@@ -4365,6 +4538,44 @@
   
   See Also: @password, safer_passwords
   See Also: (normal help) @password
+
+& @flaglevel
+  Command: @flaglevel[</switches>] <object>[=<level>]
+ 
+  This command allows the lowering of the bitlevel threshold at which
+  the NO_MODIFY and NO_EXAMINE flags stop taking effect, on a per-object
+  basis.
+ 
+  For example, it allows you to set the NO_MODIFY flag on an Architect-
+   -owned object, and then set a NoModify-Level of 4 (Councilor) on the
+  object. This results in Councilors being able to modify the object,
+  despite the NO_MODIFY flag - but Architects and lower cannot.
+ 
+  The same principle applies to the NoExamine-Levels.
+ 
+  This command is useful for scenarios where you wish to have global
+  code objects that you want to keep at low bitlevels, but don't want
+  your modify/examine-@powered staff or certain build-staff to be able
+  to tamper with.
+ 
+  The settable levels range from 2 (Guildmaster) to 5 (Royalty).
+  This allows making objects modifyable for Royalty even if the
+  NO_MODIFY flag is set, and the config paramter 'imm_nomod' is enabled.
+ 
+  The following switches exist:
+    /nomod - Set the NoModify-Level
+    /noex  - Set the NoExamine-Level
+    /clear - Clears either all, or just a specific level (In combination
+             with  the switches above)
+ 
+  Without switches, the command simply shows the currently set levels.
+ 
+  Examples:
+    > @flaglevel/nomod Foo=4
+    NoExamine level of Foo set to 4
+ 
+ 
+  See Also: NO_MODIFY, NO_EXAMINE, imm_nomod
 
 & @nuke
   Command: @nuke[/<switch>] <player>
@@ -4738,12 +4949,14 @@
   '_' attributes as well as those with the atrperms @admin parameter.
   
   Following switches exist:
-    /full -- give full statistics of the attribute, like count in use.
-    /perm -- list all current attribute based prefix permissions.
-    /list -- alias for /perm
-    /add  -- add a prefix attribute mask.
-    /del  -- delete a prefix attribute mask.
-    /mod  -- modify a prefix attribute mask.
+    /full   -- give full statistics of the attribute, like count in use.
+    /perm   -- list all current attribute based prefix permissions.
+    /list   -- alias for /perm
+    /add    -- add a prefix attribute mask.
+    /del    -- delete a prefix attribute mask.
+    /mod    -- modify a prefix attribute mask.
+    /search -- with /perm allows pattern matching with globbing
+               alone can be used to search an attribute name by numerical id
   
   The @aflags without the switches display the permissions of the
   specified attribute name.  Using the /full switch returns the count
@@ -4781,7 +4994,7 @@
      'wizhelp @aflags args'    -- explains the arguments to @aflags
      'wizhelp @aflags bits'    -- help on the level bits for see/set perms
   
-  See Also: atrperms, atrperms_max, atrperms_checkall
+  See Also: atrperms, atrperms_max, atrperms_checkall, @attribute
 
 & @aflags bits
   Command: @aflags/mod <prefix> [<own> <tgt>]=<set> <see> [<own> <tgt> <enact>]
@@ -4846,6 +5059,7 @@
                    specified attribute prefix.  You can set from '0' to '8'
                    as defined by bitlevel permissions. (help bittype())
   
+& @aflags/mod
 & @aflags mod
   Command: @aflags/mod <prefix> [<own> <tgt>]=<set> <see> [<own> <tgt> <enact>]
   
@@ -4877,6 +5091,7 @@
   
   See Also: @aflags, @aflags add, @aflags del, @aflags perm
 
+& @aflags/del
 & @aflags del
   Command: @aflags/del <prefix> [<owner> <target> <enactor>]
   
@@ -4902,6 +5117,7 @@
    
   See Also: @aflags, @aflags add, @aflags mod, @aflags perm
 
+& @aflags/add
 & @aflags add
   Command: @aflags/add <prefix>=<set> <see> [<owner>] [<target>] [<enactor>]
   
@@ -4927,6 +5143,8 @@
   
   See Also: @aflags, @aflags del, @aflags mod, @aflags perm
   
+& @aflags/perm/search
+& @aflags/perm
 & @aflags perm
   Command: @aflags/perm [<value>]
   
@@ -4940,7 +5158,7 @@
    
   Example:  @aflags/perm
             @aflags/perm 2
-
+            @aflags/perm/search *test*
   ----------------------------------------------------------------------------
   Attribute Prefix                                                 Set     See
   ----------------------------------------------------------------------------
@@ -4966,6 +5184,21 @@
     
   See Also: @aflags, @aflags add, @aflags del, @aflags mod, @aflags args
 
+& @aflags/search
+  Command: @aflags/search <value>
+  
+  This command will search the attribute name cache for the matching attribute
+  that is assigned the unique numerical id <value>.
+  
+  The /search switch may also be used with the /perm switch for content
+  filtering.
+  
+  Example: 
+    > @aflags/search 100
+    @aflags: search found attribute 'VA' with vattr integer id '100'.
+  
+  See Also: @aflags, @attribute
+   
 & @icmd
   Command: @icmd</switch> <player [= arguments]>
   
@@ -5420,42 +5653,50 @@
 
 & @tag
   Command: @tag <tagname>
-           @tag/list 
+           @tag/list [<number>]
            @tag/list <searchstring>
            @tag/add <tagname>=<#dbref>
            @tag/remove <tagname>
   
   This command gets used to manage and list the named tags of Rhost's tag
   system (see wizhelp tags).
- 
-  The first form lists the #dbref stored behind the tag named <tagname>. If
-  the tag does not exist, #-1 gets returned. This also goes for tags that
-  previously existed, but the #dbref stored behind them has been @destroyed
-  in the meantime - even if a new object once more is valid behind this
-  #dbref.
- 
-  @tag/list lists all current valid tags and the #dbref associated with them.
-  @tag/list also accepts an optional search string as an argument. This
-  can get used to filter the taglist by names. It accepts wildcards and is
-  case-insensitive. 
- 
-  @tag/add gets used to add a tag. If a named tag already exists, an error
-  is returned.
- 
-  @tag/remove removes an existing tag. If the tag named <tagname> does not
-  exist, an error is returned.
- 
+   
+  Option: @tag <tagname>
+    The first form lists the #dbref stored behind the tag named <tagname>. 
+    If the tag does not exist, #-1 gets returned. This also goes for tags that
+    previously existed, but the #dbref stored behind them has been @destroyed
+    in the meantime - even if a new object once more is valid behind this
+    #dbref.  
+  
+  Option: @tag/list [<number>]
+    The second form allows you to specify an optional number for the page 
+    for @tag/list.  @tag/list lists all current valid tags and the #dbref 
+    associated with them.  
+    Note: If you specify '0' it will list the entire @tag/list unpaged.
+  
+  Option: @tag/list <searchstring>
+    The third form accepts an optional search string as an argument. This
+    can get used to filter the taglist by names. It accepts wildcards and is
+    case-insensitive. 
+   
+  Option: @tag/add <tagname>=<dbref# of target>
+    The forth form is used to add a tag. If @tag/add attempts to add a named 
+    tag that already exists, an error is returned.
+   
+  Option: @tag/remove <tagname>
+    The fifth and final form removes an existing tag. If @tag/remove attempts
+    to remove a named <tagname> that does not exist, an error is returned.
+   
   The following sanity checks are performed for tags:
- 
-  * Tagnames cannot be more than 32 characters in length
-  * Tagnames cannot contain whitespace.
-  * Tags need to be supplied with a valid, existing object's #dbref on
-     creation.
-  * Up to 16 tags can reference the same #dbref
-  * Unicode is valid in tagnames!
-  * On destruction of an object, all referencing tags get also removed.
- 
-  See also: wizhelp tags, help tag()
+    * Tagnames cannot be more than 32 characters in length
+    * Tagnames cannot contain whitespace.
+    * Tags need to be supplied with a valid, existing object's #dbref on
+      creation.
+    * Up to 16 tags can reference the same #dbref
+    * Unicode is valid in tagnames!
+    * On destruction of an object, all referencing tags get also removed.
+   
+  See also: wizhelp tags, help tag(), help @ltag
    
 & TOTEMS
   Topic: TOTEMS
@@ -5569,7 +5810,7 @@
     /rename   - Rename the totem.  CONFIG: totem_rename
                 Syntax:  @totem/rename totemname=newname
     /validate - Does a validation check on totems for dangling slot/values
-                Syntax:  @totem/validate
+                Syntax:  @totem/validate [<player>]
     /info     - Does information lookup on the specified totem.
                 Syntax:  @totem/info totemname
     /fulllist - Does full expansion of totem list (NAME|SLOT|VALUE)
@@ -5583,10 +5824,8 @@
     /letter   - Assign a flag letter to totem.  CONFIG: totem_letter
                 Syntax:  @totem/letter totemname=tierlevel letter
     /slot     - display all the slots and the number of totems assigned.
-  
-    Currently not implemented:
     /clean    - Will clean the dangling slot/values off all players
-                Syntax:  @totem/clean
+                Syntax:  @totem/clean [[<target>] [=<args>]] ('all' is default)
    
   You may see individual help with 'help @totem/switchname' for any of the
   above switches for more detail on each sub-topic.
@@ -5775,7 +6014,7 @@
 & @totem/validate
 & totem validate
 & @totem validate
-  Command: @totem/validate
+  Command: @totem/validate [<target>]
   
   This command will go through all the totems and print out any invalid
   totems.  Invalid totems are totems that are defined on players that 
@@ -5788,9 +6027,12 @@
   This will display all invalid totem values, what slot they exist in,
   and a list of every dbref# in the database that currently has defined
   an unreferenced totem bitmask.
+  
+  You may specify an optional player instead of the entire database.
    
   Example:
     > @totem/validate
+    > @totem/validate *player
   
   See Also: @totem 
 
@@ -5920,11 +6162,43 @@
     > totem_letter mytotem 0 m
     > totem_letter mytotem1 1 m
     > totem_letter mytotem2 2 m
-   
+  
+  See Also: @totem
+
 & @totem/clean
 & totem clean
 & @totem clean
-  Not currently implemented.
+  Command: @totem/clean [all]
+           @totem/clean <target>
+           @totem/clean <target>=<s1>/<mask1> <s2>/<mask2> ... <sN>/<maskN>
+  
+  This command will clean the target (or the entire database) of all totems
+  that have invalid flag definitions.  You may wish to consider the need for
+  this prior to running it as this does no harm to the database at all and
+  due to the dynamic totem system it is entirely possible that totem masks
+  may be set or unset dynamically on the fly.
+  
+  If, however, you wish to clean individual targets or the entire database
+  then it is possible to do so.
+  
+  You must control the target in order to clean it.
+  
+  All changes made will be dumped to the database on next db write but
+  are immediately changed and avaialble in-memory until then.
+  
+  You may specify one or more slots <sN> and masks <maskN> to specify
+  specific cleaning.  This way you can clean off specific masks and leave
+  others that you may wish to reuse.  Masks may be combined or separated.
+  
+  Note: only immortals may clean the entire database.
+  
+  Examples:
+    > @totem/clean
+    > @totem/clean all
+    > @totem/clean *myplayer
+    > @totem/clean *myplayer=3/0x1007703 4/0x00010000 4/0x10000000
+  
+  See Also: @totem, @totem/validate, @totem/info
 
 & @totem/slots
 & totem slots
@@ -5960,7 +6234,7 @@
   
   The @toggledef handles all TOGGLES.  (help @toggledef4 for options)
   The @flagdef handles all FLAGS.      (help @flagdef4 for options)
-  The @totemdef handles all TOTEMS.      (help @totemdef4 for options)
+  The @totemdef handles all TOTEMS.    (help @totemdef4 for options)
   
   The following switches exist for this command.
     /set    - This sets permissions of who can SET the flag.
@@ -5979,6 +6253,8 @@
                  'NoM'  - defines if the flag is un-modifiable.
                  'T'    - Unique to Totems ([P]ermanent, [S]tatic, [T]emporary)
                  'Slot' - Unique to Totems (slot position for @totem)
+    /slot   - Unique to Totems. Will show all the current slots available in 
+              totems and if they are locked to hardcode only or not.
   
   Keep in mind that if the columns are EMPTY, it defaults to whatever the mush
   standard permissions are for setting and unsetting those flags.
@@ -6060,8 +6336,6 @@
   
   {see 'wizhelp @flagdef4' for a list of all @admin related parameters}
   
-  See Also: @flag, @flagdef, @toggledef
-
 & @totemdef4
 & @toggledef4
 & @flagdef4
@@ -6090,7 +6364,10 @@
   
   See Also: flag_access_set, flag_access_unset, flag_access_see,
             toggle_access_set, toggle_access_unset, toggle_access_see,
-            flag_access_type, toggle_access_type, @flagdef, @toggledef
+            flag_access_type, toggle_access_type, totem_access_set,
+            totem_access_unset, totem_access_see, totem_access_type,
+            @flagdef, @toggledef, @totemdef
+  
 & @hook
   Command: @hook[/<switch(s)>] [<command/attribute>]
   
@@ -6951,27 +7228,27 @@
   ansi_default             ansi_textfiles           api_nodns
   api_port                 areg_file                areg_lim               
   aregh_file               atrperms                 atrperms_checkall
-  atrperms_max             attr_access              attr_alias             
-  attr_cmd_access          authenticate             bad_name               
-  badsite_file             bcc_hidden               blacklist_max
-  blind_snuffs_cons        brace_compatibility      break_compatability    
-  cache_depth              cache_steal_dirty        cache_trim             
-  cache_width              cap_articles             cap_conjunctions       
-  cap_preposition          check_interval           check_offset           
-  clone_copies_cost        cluster_cap              clusterfunc_cap        
-  comcost                  command_dark             command_quota_increment
-  command_quota_max        compress_program         compression            
-  config_access            conn_timeout             connect_file           
-  connect_methods          connect_perm             connect_reg_file       
-  cpu_secure_lvl           cpuintervalchk           cputimechk             
-  crash_database           create_max_cost          create_min_cost        
-  dark_sleepers            default_home             delim_null             
-  descs_are_local          dig_cost                 door_file              
-  door_index               down_file                down_motd_message      
-  dump_interval            dump_message             dump_offset            
-  earn_limit               elements_compat          empower_fulltel        
-  enable_tstamps           enforce_checksums        enforce_unfindable     
-  enhanced_convtime        error_file 
+  atrperms_max             atrcachemax              attr_access            
+  attr_alias               attr_cmd_access          authenticate           
+  bad_name                 badsite_file             bcc_hidden             
+  blacklist_max            blind_snuffs_cons        brace_compatibility    
+  break_compatability      cache_depth              cache_steal_dirty      
+  cache_trim               cache_width              cap_articles           
+  cap_conjunctions         cap_preposition          check_interval         
+  check_offset             clone_copies_cost        cluster_cap            
+  clusterfunc_cap          comcost                  command_dark           
+  command_quota_increment  command_quota_max        compress_program       
+  compression              config_access            conn_timeout           
+  connect_file             connect_methods          connect_perm           
+  connect_reg_file         cpu_secure_lvl           cpuintervalchk         
+  cputimechk               crash_database           create_max_cost        
+  create_min_cost          dark_sleepers            default_home           
+  delim_null               descs_are_local          dig_cost               
+  door_file                door_index               down_file              
+  down_motd_message        dump_interval            dump_message           
+  dump_offset              earn_limit               elements_compat        
+  empower_fulltel          enable_tstamps           enforce_checksums      
+  enforce_unfindable       enhanced_convtime        error_file 
   
 { 'wizhelp config parameters2' for more }
 { 'wizhelp config parameters reality' for more (reality levels) }
@@ -6980,35 +7257,35 @@
 & CONFIG PARAMETERS2
   Topic: CONFIG PARAMETERS (continued)
   
-  error_index               examine_flags              examine_public_attrs
-  examine_restrictive       exec_secure                execscriptpath
-  exit_attr_default         exit_flags                 exit_parent           
-  exit_quota                exit_separator             exit_toggles          
-  exits_connect_rooms       expand_goto                fascist_teleport      
-  file_object               find_money_chance          flag_alias            
-  flag_name                 flag_access_see            flag_access_set          
-  flag_access_type          flag_access_unset          float_precision       
-  float_switches            forbid_host                forbid_site        
-  forbidapi_host            forbidapi_site             fork_dump          
-  format_compatibility      fork_vfork                 format_contents    
-  format_exits              format_name                formats_are_local  
-  full_file                 full_motd_message          function_access    
-  function_alias            function_invocation_limit  function_max       
-  function_recursion_limit  gdbm_cache_size            gdbm_database        
-  global_aconnect           global_adisconnect         global_ansimask    
-  global_attrdefault        global_clone_exit          global_clone_obj   
-  global_clone_player       global_clone_room          global_clone_thing 
-  global_error_cmd          global_error_obj           global_parent_exit 
-  global_parent_obj         global_parent_player       global_parent_room 
-  global_parent_thing       good_name                  goodmail_host      
-  gconf_file                guest_char_num             guest_file         
-  guest_namelist            guest_randomize            guild_attrname     
-  guild_default             guild_hdr                  hackattr_nowiz     
-  hackattr_see              hardconn_host              hardconn_site      
-  hasattrp_compat           hastype_always_zero        heavy_cpu_max
-  help_file                 help_index                 help_separator
-  hide_nospoof              hook_cmd                   hook_obj
-  hook_offline
+  error_index             examine_flags              examine_public_attrs
+  examine_restrictive     exec_secure                execscripthome
+  execscriptpath          exit_attr_default          exit_flags              
+  exit_parent             exit_quota                 exit_separator       
+  exit_toggles            exits_connect_rooms        expand_goto            
+  fascist_teleport        file_object                find_money_chance      
+  flag_alias              flag_name                  flag_access_see        
+  flag_access_set         flag_access_type           flag_access_unset      
+  float_precision         float_switches             forbid_host            
+  forbid_site             forbidapi_host             forbidapi_site         
+  fork_dump               format_compatibility       fork_vfork             
+  format_contents         format_exits               format_name            
+  formats_are_local       full_file                  full_motd_message      
+  function_access         function_alias             function_invocation_limit
+  function_max            function_recursion_limit   gdbm_cache_size        
+  gdbm_database           global_aconnect            global_adisconnect     
+  global_ansimask         global_attrdefault         global_clone_exit      
+  global_clone_obj        global_clone_player        global_clone_room      
+  global_clone_thing      global_error_cmd           global_error_obj       
+  global_parent_exit      global_parent_obj          global_parent_player   
+  global_parent_room      global_parent_thing        good_name              
+  goodmail_host           gconf_file                 guest_char_num         
+  guest_displaylastsite   guest_file                 guest_namelist         
+  guest_randomize         guild_attrname             guild_default          
+  guild_hdr               hackattr_nowiz             hackattr_see           
+  hardconn_host           hardconn_site              hasattrp_compat        
+  hastype_always_zero     heavy_cpu_max              help_file              
+  help_index              help_separator             hide_nospoof           
+  hook_cmd                hook_obj                   hook_offline
   
 { 'wizhelp config parameters3' for more }
 
@@ -7035,10 +7312,11 @@
   mailbox_size             maildelete               mailinclude_file       
   mailmutt                 mailprog                 mailsub                
   mailmax_send             master_room              match_own_commands     
-  manlog_file              map_delim_space          max_cpu_cycles         
-  max_dest_limit           max_folders              max_lastsite_api       
-  max_lastsite_cnt         max_name_protect         max_pcreate_lim        
-  max_pcreate_time         max_percentsubs          max_players
+  manlog_file              map_delim_space          max_api_timeout
+  max_cpu_cycles           max_dest_limit           max_folders            
+  max_lastsite_api         max_lastsite_cnt         max_name_protect       
+  max_pcreate_lim          max_pcreate_time         max_percentsubs        
+  max_players
   
 { 'wizhelp config parameters4' for more }
 
@@ -7063,15 +7341,16 @@
   old_elist                online_reg                open_cost               
   output_database          output_limit              page_cost               
   pagelock_notify          paranoid_allocate         paranoid_exit_linking
-  parent_follow            parentable_control_lock   partial_conn
-  partial_deconn           passapi_host              passapi_site
-  passproxy_host           passproxy_site            paycheck
-  pcreate_paranoia         pcreate_paranoia_fail     pemit_any_object
-  pemit_far_players        penn_playercmds           penn_setq
-  penn_switches            permit_site               player_attr_default
-  player_dark              player_flags              player_listen
-  player_match_commands    player_match_own_command  player_name_spaces
-  player_parent            player_queue_limit        player_quota           
+  parent_follow            parent_nest_limit         parentable_control_lock 
+  partial_conn             partial_deconn            passapi_host            
+  passapi_site             passproxy_host            passproxy_site          
+  paycheck                 pcreate_paranoia          pcreate_paranoia_fail   
+  pemit_any_object         pemit_far_players         penn_playercmds         
+  penn_setq                penn_switches             permit_site             
+  player_absolute          player_attr_default       player_dark             
+  player_flags             player_listen             player_match_commands   
+  player_match_own_command player_name_spaces        player_parent           
+  player_queue_limit       player_quota           
   
 { 'wizhelp config parameters5' for more }
 
@@ -7096,45 +7375,47 @@
   rwho_host                 rwho_info_port            rwho_password           
   rwho_transmit             sacrifice_adjust          sacrifice_factor        
   safe_wipe                 safer_passwords           safer_ufun              
-  sconnect_cmd              sconnect_host             sconnect_reip           
-  search_cost               secure_atruselock         secure_dark             
-  secure_functions          secure_jumpok             see_owned_dark          
-  sha2rounds                showother_altname         shs_reverse             
-  sidefx_maxcalls           sidefx_returnval          sideeffects             
-  signal_action             signal_crontab            signal_object           
-  signal_object_type        space_compress            spam_limit              
-  spam_msg                  spam_objmsg               sqlite_db_path          
-  sqlite_query_limit        stack_limit
+  saystring_eval            sconnect_cmd              sconnect_host           
+  sconnect_reip             search_cost               secure_atruselock       
+  secure_dark               secure_functions          secure_jumpok           
+  see_owned_dark            setqlabel                 sha2rounds              
+  showother_altname         shs_reverse               sidefx_maxcalls         
+  sidefx_returnval          sideeffects               signal_action           
+  signal_crontab            signal_object             signal_object_type      
+  space_compress            spam_limit                spam_msg                
+  spam_objmsg               sqlite_db_path            sqlite_query_limit      
+  stack_limit               start_build               starting_money          
+  starting_quota            strfunc_softfuncs
   
 { 'wizhelp config parameters6' for more}
 
 & config parameters6
   Topic: CONFIG PARAMETERS (continued)
 
-  start_build               starting_money            starting_quota
   string_conn               string_conndark           string_connhide
   string_create             string_register           suspect_host            
   suspect_site              sweep_dark                switch_default_all      
   switch_search             switch_substitutions      terse_shows_contents    
   terse_shows_exits         terse_shows_move_messages thing_attr_default      
   thing_flags               thing_parent              thing_quota             
-  thing_toggles             timeslice                 toggle_access_see       
-  toggle_access_set         toggle_access_type        toggle_access_unset     
-  totem_add                 totem_alias               totem_access_see
-  totem_access_set          totem_access_type         totem_access_unset
-  totem_letter              totem_name                totem_rename
-  totem_types               tor_localhost             tor_paranoid            
-  trace_output_limit        trace_topdown             tree_character          
-  trust_site                uncompress_program        unowned_safe            
-  user_attr_flags           validate_host             vattr_command           
-  vattr_limit_checkwiz      vercustomstr              vlimit                  
-  wait_cost                 wall_cost                 whereis_notify          
-  wizmax_dest_limit         wizmax_vattr_limit        who_default             
-  who_unfindable            who_showwiz               who_wizlevel            
-  who_whowiztype            whohost_size              wiz_override            
-  wiz_uselock               wizard_help_file          wizard_help_index       
-  wizard_motd_file          wizard_motd_message       wizard_queue_limit      
-  wizcommand_quota_max      zone_parents
+  thing_toggles             timeslice                 timezone
+  toggle_access_see         toggle_access_set         toggle_access_type      
+  toggle_access_unset       totem_add                 totem_alias             
+  totem_access_see          totem_access_set          totem_access_type       
+  totem_access_unset        totem_letter              totem_name              
+  totem_rename              totem_types               tor_localhost           
+  tor_paranoid              trace_output_limit        trace_topdown           
+  tree_character            trust_site                uncompress_program      
+  unowned_safe              user_attr_flags           validate_host           
+  vattr_command             vattr_interval            vattr_limit_checkwiz    
+  vercustomstr              vlimit                    wait_cost               
+  wall_cost                 whereis_notify            wizmax_dest_limit       
+  wizmax_vattr_limit        who_default               who_unfindable          
+  who_showwiz               who_wizlevel              who_whowiztype          
+  whohost_size              wiz_override              wiz_uselock             
+  wizard_help_file          wizard_help_index         wizard_motd_file        
+  wizard_motd_message       wizard_queue_limit        wizcommand_quota_max    
+  zone_parents
   
 { 'wizhelp config parameters reality' for more (reality levels) }
 { 'wizhelp config parameters mysql' for more (mysql params) }
@@ -7156,6 +7437,39 @@
   mysql_port
 
 { 'wizhelp config parameters reality' for more (reality levels) }
+
+& CONFIG PARAMETERS DISPLAY
+  These are config parameters that are only useful for displaying 
+  values for use in code or other situations.
+  
+  lbuf_size        mbuf_size          sbuf_size      register_count
+
+& lbuf_size
+  Config Display: lbuf_size
+  
+  This value will display what the current LBUF buffer size is in bytes.
+  
+  See Also: mbuf_size, sbuf_size
+
+& mbuf_size
+  Config Display: mbuf_size
+  
+  This value will display what the current MBUF buffer size is in bytes.
+  
+  See Also: lbuf_size, sbuf_size
+
+& sbuf_size
+  Config Display: sbuf_size
+  
+  This value will display what the current SBUF buffer size is in bytes.
+  
+  See Also: mbuf_size, lbuf_size
+
+& register_count
+  Config Display: register_count
+  
+  This value will display the total number of setq registers allowed.
+  This can be boosted with config parameter settings above 36.  
 
 & mysql_delay
   Config parameter: mysql_delay <value>.  Default: 0 (range 60-86400)
@@ -7374,7 +7688,13 @@
     DELETE()  -- Key field reversed if DISABLED
     LEFT()    -- Key field reversed if DISABLED
     RIGHT()   -- Key field reversed if DISABLED
-  
+    NUMPOS()  -- Key field reversed if DISABLED
+    POS()     -- Key field reversed if DISABLED
+    TOTPOS()  -- Key field reversed if DISABLED
+    MERGE()   -- Key field reversed if DISABLED
+   
+  See normal help on the functions for more information.
+   
 & ansi_txtfiles
   Config parameter: ansi_textfiles <boolean>   Default: 0
   
@@ -7407,6 +7727,25 @@
   Specifies the file seen when AUTOREGISTRATION is enabled at the connect
   screen and a player who is able to autoregister AND able to create
   connects to the mush.
+
+& atrcachemax
+  Config parameter: atrcachemax <value>    Default: 10
+  
+  Specifies the number of execution caches for attribute contents you can
+  use in the game.  The maximum value you can use is 200.  
+  
+  These caches will store execution values from functions into a memory
+  bound cache, and upon hitting a pre-defined interval from the last
+  time it was fetched, will re-cache the value before fetching.
+  
+  This can only be done on boot (or reboot) of the mush.  Attempting
+  to do this with a running game will return an error.
+  
+  All caches upon a system reboot are reset and unitialized.
+  
+  @list alloc will show the allocation used for this.
+  
+  See Also: @list
 
 & atrperms
   Config parameter: atrperms <field1> <field2> ... <fieldX>
@@ -7874,6 +8213,8 @@
   101 will only stop anyone with wanderer from connecting.
   105 will allow guests and wizard and higher to connect. 
   
+  For other connect screen commands, please refer to 'logout_cmd_access'.
+  
   See Also: logout_cmd_access, account_login(), account_owner()
   
 & connect_reg_file
@@ -8161,7 +8502,16 @@
   non-alphanumeric characters.  Ergo, it will only then escape out characters
   that are not A-Z, a-z, or 0-9.
   
-  See Also: execscript()
+  See Also: execscript(), execscripthome
+
+& execscripthome
+  Config parameter: execscripthome <strings>.  Default: (empty)
+  
+  This is the optional override of where you wish to have the scripts for
+  execscript lie.  The default directory for these scripts will be in
+  ~/game/scripts off your main RhostMUSH directory path.  
+  
+  See Also: execscript(), execscriptpath
 
 & execscriptpath
   Config parameter: execscriptpath <strings>.  Default: (empty)
@@ -8172,7 +8522,7 @@
   alpha-numerical characters and will not allow any other character 
   including wildcards.
   
-  See Also: execscript()
+  See Also: execscript(), execscripthome
   
 & exit_attr_default
   Config parameter: exit_attr_default <dbref>.  Default: -1
@@ -8877,7 +9227,7 @@
   Why the VA attribute?  Why not?  I felt it was being all alone
   and left out of the fun ;)
   
-Example:
+  Example:
     > @admin global_error_obj=10
     Set.
     > @va #10=[pemit(%#,You typed '%0')]
@@ -9080,7 +9430,19 @@ Example:
   guest character is subject to additional restrictions (such as not being
   allowed to create or destroy objects).  The actual restrictions can be
   changed with the access config parameter using the no_guest permission.
-  See Also: access.
+  
+  See Also: access, guest_displaylastsite
+
+& guest_displaylastsite
+  Config parameter: guest_displaylastsite <bool>    Default: yes (1)
+  
+  This toggles weither guests will be notified of the last site(s) they
+  connected from when they connect.  This handles both successful and
+  failed connected site information.
+  
+  This is added protection against possible privacy issues.
+  
+  See Also: guest_char_num, guest_namelist
 
 & guest_file
   Config parameter: guest_file <path>.  Default: guest.txt.
@@ -9088,7 +9450,7 @@ Example:
   Specifies the file that is to be shown to people connecting to the
   guest character in place of the motd file.
   
-  See Also: guest_char_num
+  See Also: guest_char_num, guest_displaylastsite
 
 & guest_namelist
   Config parameter: guest_namelist <val !val val>.  Default: (none)
@@ -9117,7 +9479,7 @@ Example:
   
   Any players over 31 total added to the list will be ignored.
   
-  See Also: guest_file, num_guests, guest_randomize
+  See Also: guest_file, num_guests, guest_randomize, guest_displaylastsite
 
 & guest_randomize
   Config parameter: guest_randomize <boolean>.   Default: off (0)
@@ -9126,7 +9488,7 @@ Example:
   a guest based on the free list of guests currently available.  This
   also takes into account the guest_namelist.
   
-  See Also: guest_namelist, num_guests
+  See Also: guest_namelist, num_guests, guest_displaylastsite
 
 & guild_attrname
   Config parameter: guild_attrname <string>.  Default: Guild
@@ -9256,6 +9618,11 @@ Example:
          - ignore      establish ignore inheritance of attribute/command.
          - igswitch    specifies if command bypasses failed /switch notices.
          - fail        specified what happens instead of 'permission denied'
+         - include     when used with before/after treat like an @include
+  
+  Quick Examples:
+    > hook_cmd @name before include
+    > hook_cmd @create ignore
   
   For detailed information on how to set up hooks, please see wizhelp on:
                                 HOOK SETUP
@@ -9347,11 +9714,20 @@ Example:
   Sets the dbref of the ICMD Object, usable with @icmd/eval.
   See 'wizhelp @icmd'
 
+& vattr_interval
+  Config parameter: vattr_interval <secs>.  Default: 3600
+  
+  Sets the interval that the attribute cache should be refreshed for
+  use with setting new attributes.
+  
+  See Also: @enable, @disable, @attribute
+
 & idle_interval
   Config parameter: idle_interval <secs>.  Default: 60
   
   Sets the interval between checks for idle users. 
-  See Also: conn_timeout, idle_timeout.
+  
+  See Also: conn_timeout, idle_timeout, @enable, @disable
 
 & idle_message
   Config parameter: idle_message <yes/no>.  Default: yes
@@ -9490,9 +9866,10 @@ Example:
   Config parameter: includenest <value>.  Default: 3
   
   Specifies the total number of times @include can be nested within itself.
-  Please try to keep this value somewhat low to avoid attacks on your mush.
+  Please try to keep this value somewhat low to avoid attacks on your mush
+  as well as limit the overall stack space the mush takes in resource.
   
-  See Also: includecnt
+  See Also: includecnt, parent_nest_limit
 
 & initial_size
   Config parameter: initial_size <value>.  Default: 1000
@@ -9804,9 +10181,15 @@ Example:
   
   This parameter specifies the access for commands that can be executed at
   the connect screen.  Keep in mind, that this effects the command PERIOD
-  and not JUST at the connect screen.  Examples of commands this effects
-  would be WHO, DOING, INFO, etc.
+  and not JUST at the connect screen.  
+  Normal:
+     DOING        LOGOUT      OUTPUTPREFIX  OUTPUTSUFFIX  QUIT
+     RWHO         SESSION     WHO           INFO
+  API:
+     GET          POST        HEAD          PUT
   
+  For connect commands (co, cd, cc) please refer to 'connect_perm')
+   
   The following options have special meaning for permissions for commands
   for players at the connect screen:
     ignore  -- then players at the connect screen can still issue the 
@@ -9815,7 +10198,7 @@ Example:
                is 'ignored' for the connect screen.
     disable -- the command is disabled entirely equally.
   
-  See Also: logout_cmd_alias
+  See Also: logout_cmd_alias, connect_perm
 
 & logout_cmd_alias
   Config parameter: logout_cmd_alias <new alias> <command>
@@ -9890,6 +10273,21 @@ Example:
   
   See Also: global_aconnect, global_adisconnect
 
+& max_api_timeout
+  Config parameter: max_api_timeout <num>.  Default: 20
+  
+  This specifies the maximum value allowed for the "Keep-Alive: timeout=XX"
+  parameter for the API handler.  The default value for the maximum connection
+  allowed is 20 seconds.  The maximum value for the maximum connection
+  allowed is 300 seconds (5 minutes).  The minimum value is 1 second.
+  Any API call attempting to set a value outside this range gets reset to the
+  maximum or minimum value depending on the high/low value specified.
+  
+  By default, any API connections established without a Keep-Alive value will
+  be set at 1 second.
+  
+  See Also: api
+  
 & max_cpu_cycles
   Config parameter: max_cpu_cycles <num>.  Default: 3
   
@@ -10420,7 +10818,7 @@ Example:
   time.  Do note that each and every guest will be unique and that if more 
   are required, more need to be @pcreated.
   
-  See Also: guest_namelist, guest_randomize
+  See Also: guest_namelist, guest_randomize, guest_displaylastsite
 
 & comcost
   Config parameter: comcost <amount>.  Default: 5
@@ -10464,6 +10862,20 @@ Example:
         control of each parent in order to view it, which I found too 
         restrictive.
   
+  
+& parent_nest_limit
+  Config parameter: parent_nest_limit <value>.    Default: 10
+  
+  This controls how deep with nesting parent lookups can occur.  Please
+  be aware that the higher the parent level the higher the stack requirements.
+  
+  If you exceed the stack space of your current shell, the mush could 
+  potentially run out of memory for stack and will shut itself down.
+  
+  Do to this either give yourself plenty of growing room or keep this
+  value to reasonable limits.
+  
+  See Also: includenest
   
 & parentable_control_lock
   Config parameter: parentable_control_lock <yes/no>.  Default: no
@@ -10590,6 +11002,17 @@ Example:
   See Also: badsite_file, forbid_site, register_site, forbidapi_site, 
             SITE LISTS.
 
+& player_absolute
+  Config parameter: player_absolute <boolean>.   Default: 0 (off)
+  
+  Specifies if player cache lookups happen at the location of the player.
+  This will allow looking at players, for example, by using their aliases.
+  
+  By default this is not the standard behavior of mush based engines.
+  
+  This effects look, senses, rob, locate(), and any other feature that
+  does a *specific* player based lookup match.
+  
 & player_attr_default
   Config parameter: player_attr_default <dbref>.  Default: -1
   
@@ -11260,6 +11683,14 @@ Example:
   
   See Also: @password, @newpassword
 
+& saystring_eval
+  Config parameter: saystring_eval <boolean>.   Default: 0 (no)
+  
+  This parameter enables the evaluation of the @saystring variable.
+  By default this does not evaluate and sees the string as a literal
+  string.  If this is enabled, then saystrings are evaluated as the
+  owner of the @saystring.
+  
 & sconnect_cmd
   Config parameter: sconnect_cmd <string>.   Default: (NULL)
   
@@ -11376,6 +11807,14 @@ Example:
   look at a room.  It does not affect the inventory or examine commands,
   both of which show all objects.
 
+& setqlabel
+  Config parameter: setqlabel <yes/no>.    Default: no
+  
+  Specifies if SETQ/SETR registers that have a label applied will require
+  the label to be used to set the register.  Attempting to set a register
+  with the 0-9/a-z value on a labeled register with this enabled will
+  result in an error message being returend.
+  
 & sha2rounds
   Config parameter: sha2rounds <value>.    Default: 5000
   
@@ -11656,6 +12095,16 @@ Example:
   auto-restart script to decide whether or not to bring the mush back up,
   for instance.
 
+& strfunc_softfuncs
+  Config parameter: strfunc_softfuncs <value>.  Default: 0
+  
+  This will specify if the strfunc() function handles soft functions or
+  just hardcoded functions.  The values that can be specified are as
+  follows.
+      0 - only hardcoded functions (default)
+      1 - hardcoded functions and @functions
+      2 - hardcoded functions, @functions, and @lfunctions
+  
 & string_conn
   Config parameter: string_conn <string>.  Default: connect
   
@@ -11999,6 +12448,7 @@ Example:
   
   Sets how much quota it costs to create a thing (and also how much the
   remaining quota is increased when a thing is @destroyed.
+  
   See Also: @quota, exit_quota, player_quota, room_quota, QUOTAS.
 
 & timeslice
@@ -12008,8 +12458,17 @@ Example:
   increased.  Each command a user types in (commands executed by machines do
   not count) decreases that user's quota by 1, and the user's commands are
   only executed if the quota is greater than zero.
+  
   See Also: command_quota_incr, command_quota_max.
 
+& timezone
+  Config parameter: timezone [<valid timezone string>.  Default: localtime
+  
+  This will specify the default timezone that the mush will use.  All 
+  base timefunctions will be based on this timezone.
+  
+  See Also: TIMEZONE (in normal help)
+   
 & totem_add
   Config parameter: totem_add <totemname> <slot> <bitvalue>
   
@@ -12856,20 +13315,25 @@ Example:
   ACCOUNT_LOGIN()  ACCOUNT_OWNER()  ACCOUNT_SU()  ACCOUNT_WHO() AFLAGS()    
   BEEP()           BYPASS()         CANSEE()      CHECKPASS()   CHKGARBAGE()
   CLOAK()          CODEPOINT()      DOING()       DYNHELP()     EXECSCRIPT()
-  HASDEPOWER()     HASPOWER()       HASTOGGLE()   ISHIDDEN()    LATTRP()    
-  LDEPOWERS()      LOGTOFILE()      LOGSTATUS()   LOOKUP_SITE() LPOWERS()   
-  LTOGGLES()       MAILALIAS()      MAILQUICK()   MAILQUOTA()   MAILSIZE()  
-  MAILSTATUS()     MSIZETOT()       NSLOOKUP()    QUOTA()       SIZE()      
-  TEXTFILE()       MAILREAD()       MAILSEND()   
+  EXECSCRIPTNR()   HASDEPOWER()     HASPOWER()    HASTOGGLE()   ISHIDDEN()  
+  LATTRP()         LDEPOWERS()      LOGTOFILE()   LOGSTATUS()   LOOKUP_SITE()
+  LPOWERS()        LTOGGLES()       MAILALIAS()   MAILQUICK()   MAILQUOTA() 
+  MAILREAD()       MAILSEND()       MAILSIZE()    MAILSTATUS()  MSIZETOT()  
+  NSLOOKUP()       QUOTA()          SIZE()        TEXTFILE()    TOTEMVALID()
 
 & EXECSCRIPT()
+& EXECSCRIPTNR()
   Function: execscript(<script name> [,<arg 0>,...,<arg 9>])
+  Function: execscriptnr(<script name> [,<arg 0>,...,<arg 9>])
   
   Note:  This function issues a shell interpreter so will have some
          overhead compared to calling it natively through an API.
   
   Note2: You may specify subdirectory overrides with the @admin param
          execscriptpath.  This only allows alphanumerical characters.
+  
+  Note3: execscriptnr is exactly the same as execscript except it will
+         not pass any register data to the script (setq registers).
     
   Requirements:  /usr/bin/timeout (on MacOSX link to /usr/local/bin/gtimeout)
                  script/binary existing in ~/game/scripts and chmod u+rx
@@ -12917,6 +13381,7 @@ Example:
   
   { 'wizhelp execscript2' for environment variables passed to the script }
   
+& EXECSCRIPT VARIABLES
 & EXECSCRIPT2
   (CONTINUED)
   Function: execscript(<script name> [,<arg 0>,...,<arg 9>])
@@ -13413,6 +13878,88 @@ Example:
   
   See Also: @dynhelp, dynhelp()
 
+
+& TOTEM LIST
+  Topic: TOTEM LIST
+  
+  Flag  Title        Flag  Title           Flag  Title      Flag  Title
+  -------------------------------------------------------------------------
+    u   API_LUA       {p}  PROMPT
+  
+  See Also: flag list, toggle list, attribute flags
+  
+  For information on a particular totem, type 'wizhelp <totemname>'.
+  If you do not receive the expected result, try: 'wizhelp <totemname> totem'
+
+& API_LUA TOTEM
+  Totem: API_LUA
+  
+  The API_LUA totem is used to enable and allow LUA integration in the API
+  transport for the Rhost API subsystem.  This allows LUA integration and
+  expands greatly in what can be done.
+  
+  Individual help will be provided.  This area is TBD.
+  
+& PROMPT TOTEM
+  Totem: PROMPT
+  
+  This totem when tagged on a player will allow that player to always show
+  the prompt that would normally be available only with @program.  This 
+  will read the attribute @progprompt (see help on @progprompt)
+  
+  See Also: @progprompt
+
+& @progprompt
+  Redirected from 'help @progprompt'
+  
+!!help/@progprompt
+
+& TOTEMVALID()
+  Function: totemvalid([all])
+            totemvalid(<target>)
+            totemvalid(<target>, <slot>)
+  
+  This function returns list reports on the totems within the system.
+
+  --- totemvalid() ( or totemvalid(all) )
+  The first argument (defaults to 'all') will list every dbref# in the
+  database that has an invalid @totem mask defined.  An invalid totem
+  mask is one that has a mask on the player without a defined name.
+  
+  This is entirely legal and possible as with dynamic totems they can
+  be added or removed on the fly without causing any issues or damage
+  to the database.  They are dynamic for a reason.  This just empowers
+  the admins to clean up the database with masks that will no longer
+  be used for house-cleaning.
+  
+  --- totemvalid(<target>)
+  The second argument will list all slots on the target that have
+  invalid totem masks.  This is useful for use in lists and
+  functional processing.
+  
+  --- totemvalid(<target>, <slot>)
+  The third option allows drilling down and more detail on the target.
+  You may specify the slot to show any specific masks that are invalid.
+  Any slot that is valid and fine will show '0x0000000' (or no masks).
+  
+  You may specify two unique slot values for different results:
+    -1  -- This is functionaly the same as totemvalid(<target>)
+    -2  -- This will produce the list in the form <slot>/<mask>
+  
+  Examples:
+    > think totemvalid()
+    #123 #234 #456
+    > think totemvalid(#123)
+    3 5
+    > think totemvalid(#123,-1)
+    3 5
+    > think totemvalid(#123,3)
+    0x00005001              (notice the masks will be added to what is bad)
+    > think totemvalid(#123,-2)
+    3/0x00005001 5/0x10000000
+   
+  See Also: @totem, @totemdef 
+  
 & CLOAK()
   Function: cloak(<target>,<player>)
   
@@ -14500,6 +15047,7 @@ Example:
      V - This is the same as '&' and looks for <char>_@set on HOOK_OBJ.
      M - This is the same as '-' and looks for <char>_mail on HOOK_OBJ.
      N - This is the same as ']' and looks for <char>_N on HOOK_OBJ.
+     Z - This is the same as '}' and looks for <char>_Z on HOOK_OBJ.
   
   Example:
     > &A_POSE #1234=<function-executed-after-:/;/pose> 
@@ -14606,7 +15154,7 @@ Example:
   See Also: reality_level
 
 & reality_level
-  Config parameter: reality_level <name> <value> [<desc attribute>]
+  Config parameter: reality_level <name> <value> [[<desc attribute>] [<key>]]
   Default: none
   
   Defines a reality level, named <name> and with bitvalue <value>. If you
@@ -14616,6 +15164,16 @@ Example:
   keeps a tally of those defined.  You can currently only have 32 total
   reality levels defined.
   
+  If '<key>' is specified as '1', then the matching reality desc will have
+  a matching @adesc in the form <desc attribute>_adesc.
+  
+  For example, a description of 'umbra' will have 'umbra_adesc'.
+  
+  Omitting this or setting '0' will disable this.  All attributes with
+  'desc' is assumed to always trigger the @adesc.  This is intentional.
+  
+  The adesc portion follows reality_compare.
+   
   See Also: reality_compare
 
 & reality_locks
@@ -14724,16 +15282,27 @@ Example:
   upon next reboot.  They are dynamically defined and can be changed on
   the fly.  The syntax of a reality is:
   
-     reality_level <8-CHAR-NAME> <UNIQUE-BIT> <OPTIONAL-DESCRIPTION>
+     reality_level <8-CHAR-NAME> <UNIQUE-BIT> <OPT-DESC> <OPT-BOOLEAN>
   
-  The <8-char-name> is a unique identifier/name you wish to have for the
-  reality.  Anything over 8 characters is cut off.  The <unique-bit> is
-  a unique numerical value that determines the bit-mask of the reality.
-  Example, 1, 2, 4, 8, 16, 32, etc.  The number is a power of 2.  The
-  <optional-description> is an attribute name that you wish to use for
-  the @desc of the specific reality.  Anyone who can see the reality will
-  see this desc in addition to any other descriptions that they can 
-  normally see.
+    <8-char-name> -- a unique identifier/name you wish to have for the 
+                     reality.  Anything over 8 characters is cut off.  
+                  Example: Umbra
+    <unique-bit>  -- a unique numerical value that determines the bit-mask of 
+                     the reality.  The number is a power of 2. The unique-bit
+                     may be specified in decimal or hex notation.
+                  Example: 1, 2, 4, 8, 16, 32, etc.  
+    <opt-desc>    -- an attribute name that you wish to use for the @desc of 
+                     the specific reality.  Anyone who can see the reality will
+                     see this desc in addition to any other descriptions that 
+                     they can normally see.  This is configurable by the 
+                     config parameter 'reality_compare'.
+                  Example: UMBRADESC
+    <opt-boolean> -- A value of '1' will enable @adesc matching for the custom
+                     reality description.  The format of the @adesc handler
+                     will be DESCRIPTION_ADESC.  For this to be enabled the
+                     <opt-desc> must be defined.  Any <opt-desc> of DESC will
+                     automatically have a matching @adesc called '@adesc'.
+                  Example: UMBRADESC_ADESC
   
   {reality levels2 for more}
 
@@ -14744,16 +15313,24 @@ Example:
   reality_level real 1 desc
   reality_level invis 2 desc
   reality_level umbra 4 umbra
-  reality_level all 7 
+  reality_level fae 8 faedesc 1
+  reality_level all 15
   
   The first line defines a reality of 'real' with bitmask of '1' which
-  uses the basic '@desc' for the description.  The second defines a
-  reality called 'invis' (probably short for invisible) that also uses
-  the normal description, but is bitmask '2'.  The third is called
-  'umbra'.  It is a bitmask of '4', and uses a special description called
-  'umbra' that will be parsed instead of the @desc.  The fourth 'all' 
-  contains the bitmasks of all the previous realities, thus, setting
-  a reality of 'all' will automatically set all the realities.
+  uses the basic '@desc' for the description.  
+  
+  The second defines a reality called 'invis' (probably short for invisible)
+  that also uses the normal description, but is bitmask '2'.  
+  
+  The third is called 'umbra'.  It is a bitmask of '4', and uses a special 
+  description called 'umbra' that will be parsed instead of the @desc.  
+  
+  The fourth is called 'fae'.  It is a bitmask of '8', and uses a special
+  description called 'faedesc'.  This also has adesc actions enabled and 
+  will use the action description 'faedesc_adesc' for this particular reality.
+  
+  The fifth 'all' contains the bitmasks of all the previous realities, thus, 
+  setting a reality of 'all' will automatically set all the realities.
   
   You use the @txlevel and @rxlevel commands to set/remove realities from
   a player.  TX is 'transmission' and RX is 'receiving' with regards to
@@ -15031,3 +15608,59 @@ Example:
   You say "a"
 
   See Also: CHR(), ASC()
+
+& !!~
+& !!-
+& !!
+  Topic: Help entry include indexing
+  
+  This allows indexing help files (help, wizhelp, plushelp) with include
+  redirection.  The following MUST start the line and can't be indented
+  or have tabs/spaces or any other character before it for it to be
+  identified as an include indexer.
+  
+  Example:
+    & HELP
+    !!~wizhelp/border    ( evaluate wizhelp's border entry )
+    !!wizhelp/mainhelp   ( include raw wizhelp's mainhelp entry )
+    !!~wizhelp/border    ( evaluate wizhelp's border entry )
+  
+  For a working example, see 'wizhelp helpinc'
+  
+& HELPINC
+  All include handlers *must* be the very start of the line.  If it
+  is not, it will not properly parse for you.
+  
+  Call help entry help1inc:
+  Syntax: !!HELPFILE/INDEXENTRY
+  ---->
+!!wizhelp/help1inc
+  <----
+  
+  Call help entry help2inc and evaluate
+  Syntax: !!~HELPFILE/INDEXENTRY
+  ---->
+!!~wizhelp/help2inc
+  <----
+  
+  Call help entry help3inc and subeval (parse subs, don't eval)
+  Syntax: !!-HELPFILE/INDEXENTRY
+  ---->
+!!-wizhelp/help3inc
+  <----
+  
+  You may verify the contents of each included file with:
+    > wizhelp help1inc
+    > wizhelp help2inc
+    > wizhelp help3inc
+  
+  See Also: !!
+
+& HELP1INC
+  This is the help1inc entry -- [ansi(hr,red 1)] - %n
+
+& HELP2INC
+  This is the help2inc entry -- [ansi(hg,green 2)] - %n
+
+& HELP3INC
+  This is the help3inc entry -- [ansi(hc,cyan 3)] - %n

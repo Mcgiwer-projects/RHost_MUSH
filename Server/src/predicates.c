@@ -89,6 +89,29 @@ int member(dbref thing, dbref list)
  * different in that it checks + as well as - cases
  */
 
+ATTR *
+anum_get_f(long x)
+{
+    ATTR *y;
+
+    if ( x >= A_INLINE_START ) {
+       y = anum_table_inline[x - A_INLINE_START]; 
+    } else {
+       y = anum_table[x];
+    }
+    return y;
+}
+
+void
+anum_set_f(long x, ATTR *v)
+{
+    if ( x >= A_INLINE_START ) { 
+       anum_table_inline[x - A_INLINE_START] = v;
+    } else {
+       anum_table[x] = v; 
+    }
+}
+
 int is_rhointeger (char *str)
 {
       while (*str && isspace((int)*str)) str++;       /* Leading spaces */
@@ -205,7 +228,7 @@ int ZoneWizard(dbref player, dbref target)
 {
   ZLISTNODE *ptr; 
 
-  if( !Inherits(player) ) 
+  if( !Good_chk(player) || !Inherits(player) ) 
     return 0;
 
   if( db[target].zonelist &&
@@ -226,6 +249,9 @@ int ZoneWizard(dbref player, dbref target)
 
 int See_attr(dbref p, dbref x, ATTR* a, dbref o, int f, int key)
 {
+
+  if ( !Good_obj(p) || !Good_obj(x) || !a )
+     return 0;
 
   if ( key & 2 ) {
      if ( ((a)->flags & AF_INTERNAL) || (f & AF_INTERNAL) ) {
@@ -248,7 +274,7 @@ int See_attr(dbref p, dbref x, ATTR* a, dbref o, int f, int key)
                                             ExFullWizAttr(p))) )
      return 0;
 
-  if ( !(key & 1) && NoEx(x) && (a->number != A_LAMBDA)  && !Wizard(p))
+  if ( !(key & 1) && NoEx(x) && (a->number != A_LAMBDA)  && !Wizard(p) && (obj_noexlevel(x) > obj_bitlevel(p)))
      return 0;
 
   if (Backstage(p) && NoBackstage(x))
@@ -298,6 +324,9 @@ int See_attr(dbref p, dbref x, ATTR* a, dbref o, int f, int key)
 
 int Read_attr(dbref p, dbref x, ATTR* a, dbref o, int f, int key )
 {
+  if ( !Good_obj(p) || !Good_obj(x) || !a )
+    return 0;
+
   if( ((a)->flags & (AF_INTERNAL)) || (f & (AF_INTERNAL)) )
     return 0;
 
@@ -310,7 +339,7 @@ int Read_attr(dbref p, dbref x, ATTR* a, dbref o, int f, int key )
   if( God(Owner(x)) )
     return 0;
 
-  if ( !(key & 1) && NoEx(x) && !Wizard(p))
+  if ( !(key & 1) && NoEx(x) && !Wizard(p) && (obj_noexlevel(x) > obj_bitlevel(p)))
     return 0;
 
   if (Backstage(p) && NoBackstage(x))
@@ -398,7 +427,7 @@ int Read_attr(dbref p, dbref x, ATTR* a, dbref o, int f, int key )
 #ifndef STANDALONE
 int Examinable(dbref p, dbref x) 
 {
-  if ( !Good_obj(x) )
+  if ( !Good_obj(x) || !Good_obj(p) )
     return 0;
 
   if( (Recover(x) || Going(x)) && !Immortal(Owner(p)) )
@@ -408,7 +437,7 @@ int Examinable(dbref p, dbref x)
        (!Cloak(x) && !Recover(x) && !NoEx(x)) )
     return 1;
 
-  if (NoEx(x) && !Wizard(p))
+  if (NoEx(x) && !Wizard(p) && (obj_noexlevel(x) > obj_bitlevel(p)))
     return 0;
 
   if( Owner(p) == Owner(x) )
@@ -474,7 +503,7 @@ int Examinable(dbref p, dbref x)
 #else
 int Examinable(dbref p,dbref x)
 {
-  if (NoEx(x) && !Wizard(p))
+  if (NoEx(x) && !Wizard(p) && (obj_noexlevel(x) > obj_bitlevel(p)))
     return 0;
 
   if( Owner(p) == Owner(x) )
@@ -579,7 +608,7 @@ int Controls(dbref p, dbref x)
 int Controlsforattr(dbref p, dbref x, ATTR *a, int f)
 {
 #ifndef STANDALONE
-  if ((Good_obj(x) && !WizMod(p) && NoMod(x)) || (Good_obj(x) && DePriv(p,Owner(x),DP_MODIFY,POWER7,NOTHING) &&
+  if ((Good_obj(x) && (!WizMod(p) && NoMod(x) && (obj_nomodlevel(x) > obj_bitlevel(p)))) || (Good_obj(x) && DePriv(p,Owner(x),DP_MODIFY,POWER7,NOTHING) &&
 #else
   if ((Good_obj(x) && DePriv(p,Owner(x),DP_MODIFY,POWER7,NOTHING) &&
 #endif
@@ -821,7 +850,7 @@ int pay_quota(dbref player, dbref who, int cost, int ttype, int pay)
   who = Owner(who);
 
   if ((!Builder(who) && !HasPriv(who,NOTHING,POWER_FREE_QUOTA,POWER3,POWER_LEVEL_NA)) ||
-	(DePriv(player,NOTHING,DP_UNL_QUOTA,POWER7,POWER_LEVEL_NA))) {
+        (DePriv(who,NOTHING,DP_UNL_QUOTA,POWER7,POWER_LEVEL_NA))) {
     rval = 0;
     atr1 = atr_get(who,A_RQUOTA,&owner,&flags);
     if (!Altq(who)) {
@@ -1398,8 +1427,8 @@ void do_switch (dbref player, dbref cause, int key, char *expr,
 {
    int a, any, chkwild, i_regexp, i_case, i_notify, i_inline, x,
         i_nobreak, i_breakst, i_localize, i_clearreg, i_jump, i_rollback, i_chkinline, i_orig;
-   char *cp, *s_buff, *s_buffptr, *buff, *retbuff, *s_switch_notify, *pt, *savereg[MAX_GLOBAL_REGS],
-        *npt, *saveregname[MAX_GLOBAL_REGS], *s_rollback;
+   char *cp, *s_buff, *s_buffptr, *buff, *retbuff, *s_switch_notify, *pt, *savereg[MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST],
+        *npt, *saveregname[MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST], *s_rollback;
 
    if (!expr || (nargs <= 0))
       return;
@@ -1470,7 +1499,7 @@ void do_switch (dbref player, dbref cause, int key, char *expr,
             retbuff = replace_tokens(args[a+1], NULL, NULL, expr);
             if ( i_inline ) {
                if ( i_clearreg || i_localize ) {
-                  for (x = 0; x < MAX_GLOBAL_REGS; x++) {
+                  for (x = 0; x < (MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST); x++) {
                      savereg[x] = alloc_lbuf("ulocal_reg");
                      saveregname[x] = alloc_sbuf("ulocal_regname");
                      pt = savereg[x];
@@ -1513,7 +1542,7 @@ void do_switch (dbref player, dbref cause, int key, char *expr,
                   mudstate.breakst = i_breakst;
                }
                if ( i_clearreg || i_localize ) {
-                  for (x = 0; x < MAX_GLOBAL_REGS; x++) {
+                  for (x = 0; x < (MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST); x++) {
                      pt = mudstate.global_regs[x];
                      npt = mudstate.global_regsname[x];
                      safe_str(savereg[x],mudstate.global_regs[x],&pt);
@@ -1530,7 +1559,7 @@ void do_switch (dbref player, dbref cause, int key, char *expr,
          } else {
             if ( i_inline ) {
                if ( i_clearreg || i_localize ) {
-                  for (x = 0; x < MAX_GLOBAL_REGS; x++) {
+                  for (x = 0; x < (MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST); x++) {
                      savereg[x] = alloc_lbuf("ulocal_reg");
                      saveregname[x] = alloc_sbuf("ulocal_regname");
                      pt = savereg[x];
@@ -1572,7 +1601,7 @@ void do_switch (dbref player, dbref cause, int key, char *expr,
                   mudstate.breakst = i_breakst;
                }
                if ( i_clearreg || i_localize ) {
-                  for (x = 0; x < MAX_GLOBAL_REGS; x++) {
+                  for (x = 0; x < (MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST); x++) {
                      pt = mudstate.global_regs[x];
                      npt = mudstate.global_regsname[x];
                      safe_str(savereg[x],mudstate.global_regs[x],&pt);
@@ -1600,7 +1629,7 @@ void do_switch (dbref player, dbref cause, int key, char *expr,
          retbuff = replace_tokens(args[a], NULL, NULL, expr);
          if ( i_inline ) {
             if ( i_clearreg || i_localize ) {
-               for (x = 0; x < MAX_GLOBAL_REGS; x++) {
+               for (x = 0; x < (MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST); x++) {
                   savereg[x] = alloc_lbuf("ulocal_reg");
                   saveregname[x] = alloc_sbuf("ulocal_regname");
                   pt = savereg[x];
@@ -1643,7 +1672,7 @@ void do_switch (dbref player, dbref cause, int key, char *expr,
                mudstate.breakst = i_breakst;
             }
             if ( i_clearreg || i_localize ) {
-               for (x = 0; x < MAX_GLOBAL_REGS; x++) {
+               for (x = 0; x < (MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST); x++) {
                   pt = mudstate.global_regs[x];
                   npt = mudstate.global_regsname[x];
                   safe_str(savereg[x],mudstate.global_regs[x],&pt);
@@ -1660,7 +1689,7 @@ void do_switch (dbref player, dbref cause, int key, char *expr,
       } else {
          if ( i_inline ) {
             if ( i_clearreg || i_localize ) {
-               for (x = 0; x < MAX_GLOBAL_REGS; x++) {
+               for (x = 0; x < (MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST); x++) {
                   savereg[x] = alloc_lbuf("ulocal_reg");
                   saveregname[x] = alloc_sbuf("ulocal_regname");
                   pt = savereg[x];
@@ -1703,7 +1732,7 @@ void do_switch (dbref player, dbref cause, int key, char *expr,
                mudstate.breakst = i_breakst;
             }
             if ( i_clearreg || i_localize ) {
-               for (x = 0; x < MAX_GLOBAL_REGS; x++) {
+               for (x = 0; x < (MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST); x++) {
                   pt = mudstate.global_regs[x];
                   npt = mudstate.global_regsname[x];
                   safe_str(savereg[x],mudstate.global_regs[x],&pt);
@@ -2212,9 +2241,9 @@ dbref next_exit(dbref player, dbref this, int exam_here)
 void did_it(dbref player, dbref thing, int what, const char *def, int owhat, 
 	const char *odef, int awhat, char *args[], int nargs)
 {
-  char	*d, *buff, *act, *charges, *lcbuf, *pt, *npc_name, *savereg[MAX_GLOBAL_REGS], *master_str, *master_ret;
-  char *pt2, *savereg2[MAX_GLOBAL_REGS], *tmpformat_buff, *tpr_buff, *tprp_buff,
-       *npt2, *savereg2name[MAX_GLOBAL_REGS], *npt, *saveregname[MAX_GLOBAL_REGS];
+  char	*d, *buff, *act, *charges, *lcbuf, *pt, *npc_name, *savereg[MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST], *master_str, *master_ret;
+  char *pt2, *savereg2[MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST], *tmpformat_buff, *tpr_buff, *tprp_buff,
+       *npt2, *savereg2name[MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST], *npt, *saveregname[MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST];
   dbref	loc, aowner, aowner2, master, aowner3;
   int	num, aflags, cpustopper, nocandoforyou, x, aflags2, o_chkr, tst_attr, aflags3, chkoldstate, i_didsave;
   int   did_allocate_buff;
@@ -2262,7 +2291,7 @@ void did_it(dbref player, dbref thing, int what, const char *def, int owhat,
                     !Immortal(Owner(thing))) ))) {
                 if ( mudconf.descs_are_local ) {
                    i_didsave = 1;
-                   for (x = 0; x < MAX_GLOBAL_REGS; x++) {
+                   for (x = 0; x < (MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST); x++) {
                       savereg2[x] = alloc_lbuf("ulocal_reg");
                       savereg2name[x] = alloc_sbuf("ulocal_regname");
                       pt2 = savereg2[x];
@@ -2305,7 +2334,7 @@ void did_it(dbref player, dbref thing, int what, const char *def, int owhat,
                              ((what == A_LCON_FMT) ||
                               (what == A_LEXIT_FMT) ||
                               (what == A_LDEXIT_FMT)) ) {
-                           for (x = 0; x < MAX_GLOBAL_REGS; x++) {
+                           for (x = 0; x < (MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST); x++) {
                              savereg[x] = alloc_lbuf("ulocal_reg");
                              saveregname[x] = alloc_sbuf("ulocal_reg");
                              pt = savereg[x];
@@ -2333,7 +2362,7 @@ void did_it(dbref player, dbref thing, int what, const char *def, int owhat,
                               ((what == A_LCON_FMT) ||
                               (what == A_LEXIT_FMT) ||
                               (what == A_LDEXIT_FMT)) ) {
-                           for (x = 0; x < MAX_GLOBAL_REGS; x++) {
+                           for (x = 0; x < (MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST); x++) {
                              pt = mudstate.global_regs[x];
                              npt = mudstate.global_regsname[x];
                              safe_str(savereg[x],mudstate.global_regs[x],&pt);
@@ -2549,7 +2578,7 @@ void did_it(dbref player, dbref thing, int what, const char *def, int owhat,
 	/* do the action attribute */
         if ( i_didsave && mudconf.descs_are_local ) {
            i_didsave = 0;
-           for (x = 0; x < MAX_GLOBAL_REGS; x++) {
+           for (x = 0; x < (MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST); x++) {
               pt2 = mudstate.global_regs[x];
               npt2 = mudstate.global_regsname[x];
               safe_str(savereg2[x],mudstate.global_regs[x],&pt2);
@@ -2647,7 +2676,7 @@ void did_it(dbref player, dbref thing, int what, const char *def, int owhat,
       }
       if ( i_didsave && mudconf.descs_are_local ) {
          i_didsave = 0;
-         for (x = 0; x < MAX_GLOBAL_REGS; x++) {
+         for (x = 0; x < (MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST); x++) {
             pt2 = mudstate.global_regs[x];
             npt2 = mudstate.global_regsname[x];
             safe_str(savereg2[x],mudstate.global_regs[x],&pt2);
@@ -2761,7 +2790,7 @@ char	*xargs[10];
 
 	if (nargs >= 7) {
 		parse_arglist(victim, actor, actor, args[6], '\0',
-			EV_STRIP_LS|EV_STRIP_TS, xargs, 10, (char **)NULL, 0, 0, (char **)NULL, 0);
+			EV_STRIP_LS|EV_STRIP_TS, xargs, 10, (char **)NULL, 0, 0, (char **)NULL, 0, (char *)"@verb");
 		for (nxargs=0; (nxargs<10) && xargs[nxargs]; nxargs++) ;
 	}
 
@@ -2950,3 +2979,4 @@ int	aflags, tog_val,
   return doit;
 }
 #endif
+

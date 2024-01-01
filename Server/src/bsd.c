@@ -616,6 +616,11 @@ shovechars(int port,char* address)
 		FD_SET(d->descriptor, &input_set);
 	    if (d->output_head)
 		FD_SET(d->descriptor, &output_set);
+            /* If API we always want to test input and output */
+            if ( d->flags & DS_API ) {
+		FD_SET(d->descriptor, &input_set);
+		FD_SET(d->descriptor, &output_set);
+            }
 	    if (d->flags & DS_AUTH_IN_PROGRESS) {
                 if ( d->flags & DS_API ) {
                    d->flags &= ~DS_AUTH_IN_PROGRESS;
@@ -984,8 +989,10 @@ shovechars(int port,char* address)
 		    shutdownsock(d, R_SOCKDIED);
 		}
 	    }
+
+            /* Force API disconnect if timeon greater than timeout value */
             if ( (d->flags & DS_API) ) {
-		if ( (d->connected_at + 5) < time(NULL) ) {
+		if ( (d->connected_at + d->timeout) < time(NULL) ) {
 			shutdownsock(d, R_API);
 		}
             }
@@ -1712,8 +1719,7 @@ shutdownsock(DESC * d, int reason)
 	d->doing[0] = '\0';
 	d->quota = mudconf.cmd_quota_max;
 	d->last_time = 0;
-	d->host_info = site_check((d->address).sin_addr,
-				  mudstate.access_list, 1, 0, 0) |
+	d->host_info = (site_check((d->address).sin_addr, mudstate.access_list, 1, 0, 0) & ~0x0FFFFFFF) | 
 	    			  site_check((d->address).sin_addr,
 				  mudstate.suspect_list, 0, 0, 0);
         i_sitemax = site_check((d->address).sin_addr, mudstate.access_list, 1, 1, H_FORBIDDEN);
@@ -1912,6 +1918,7 @@ start_auth(DESC * d)
 
     if( connect(d->authdescriptor, (struct sockaddr *) &sin, sizeof(sin)) < 0){
         if( errno != EINPROGRESS ) {
+          mudstate.alarm_triggered = 2;
   	  d->flags &= ~DS_AUTH_IN_PROGRESS;
           logbuff = alloc_lbuf("start_auth.LOG.timeout");
           if( errno != EINTR ) {
@@ -1932,11 +1939,6 @@ start_auth(DESC * d)
 	  VOIDRETURN; /* #8 */
         }
     }
-
-    /* recalibrate the mush timers */
-
-    mudstate.alarm_triggered = 0;
-    alarm_msec(next_timer());
 
     d->flags |= DS_AUTH_CONNECTING;
     DPOP; /* #8 */
@@ -2140,7 +2142,7 @@ initializesock(int s, struct sockaddr_in * a, char *addr, int i_keyflag, int key
        }
     }
     free_lbuf(t_addroutbuf);
-    d->host_info = site_check((*a).sin_addr, mudstate.access_list, 1, 0, 0) |
+    d->host_info = (site_check((*a).sin_addr, mudstate.access_list, 1, 0, 0) & ~0x0FFFFFFF) | 
 		   site_check((*a).sin_addr, mudstate.suspect_list, 0, 0, 0);
     i_sitemax = site_check((*a).sin_addr, mudstate.access_list, 1, 1, H_FORBIDDEN);
     if ( (i_sitemax != -1) && (i_sitecnt < i_sitemax) )
@@ -2811,6 +2813,7 @@ sighandler(int sig)
 
     switch (sig) {
     case SIGALRM:		/* Timer */
+        /* This will allow dispatch() to update the queue */
 	mudstate.alarm_triggered = 1;
 	break;
     case SIGCHLD:		/* Change in child status */

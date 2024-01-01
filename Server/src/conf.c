@@ -59,6 +59,9 @@ extern int totem_letter(char *, char, int);
 extern int totem_add(char *, int, int, int);
 extern void totem_handle_error(int, dbref, char *, char *);
 extern int totem_rename(char *, char *);
+extern int validate_timezones( char * );
+extern int global_timezone_max;
+
 /* Lensy: Not external, but a forward declaration is needed */
 CF_HAND(cf_dynstring);
 #endif
@@ -182,6 +185,7 @@ NDECL(cf_init)
     mudconf.idle_timeout = 3600;
     mudconf.conn_timeout = 120;
     mudconf.idle_interval = 60;
+    mudconf.vattr_interval = 86400;
     mudconf.retry_limit = 3;
     mudconf.regtry_limit = 1;
 #ifdef QDBM
@@ -354,6 +358,12 @@ NDECL(cf_init)
     mudconf.blacklist_max = 100000;	/* Default maximum blacklists allowed */
     mudconf.connect_perm = 0;		/* Permissions of connect */
     mudconf.elements_compat = 0;	/* Enable elementsz compatibility */
+    mudconf.atrcachemax = 10;		/* Default number of atrcaches to prep */
+    mudconf.max_api_timeout = 20;	/* Maximum API timeout value */
+    mudconf.player_absolute = 0;	/* Player absolute (cache) lookup at location */
+    mudconf.setqlabel = 0;		/* Label enforcing for setq */
+    mudconf.saystring_eval = 0;		/* @saystring evaluate? */
+    mudconf.strfunc_softfuncs = 0;	/* @function/@lfuncton to strfunc() */
     memset(mudconf.vercustomstr, '\0', sizeof(mudconf.vercustomstr));
     memset(mudconf.sub_include, '\0', sizeof(mudconf.sub_include));
     memset(mudconf.cap_conjunctions, '\0', sizeof(mudconf.cap_conjunctions));
@@ -365,12 +375,17 @@ NDECL(cf_init)
     memset(mudconf.exit_separator, '\0', sizeof(mudconf.exit_separator));
     memset(mudconf.help_separator, '\0', sizeof(mudconf.help_separator));
     memset(mudconf.execscriptpath, '\0', sizeof(mudconf.execscriptpath));
+    memset(mudconf.execscripthome, '\0', sizeof(mudconf.execscripthome));
     strcpy(mudconf.tree_character, (char *)"`");
+    strcpy(mudconf.timezone, (char *)"localtime"); /* Default localtime to timezone */
+    setenv("TZ", mudconf.timezone, 1);	/* Set timezone to variable */
+    tzset();				/* Set timezone */
     memset(mudstate.tor_localcache, '\0', sizeof(mudstate.tor_localcache));
     memset(mudconf.sconnect_cmd, '\0', sizeof(mudconf.sconnect_cmd));
     memset(mudconf.sconnect_host, '\0', sizeof(mudconf.sconnect_host));
     mudconf.sconnect_reip = 0;		/* Re-IP toggle for sconnect */
     mudconf.connect_methods = 0;	/* Disable optionally connect methods */
+    mudconf.guest_displaylastsite = 1;	/* Display guest site on connect -- default yes (default behavior) */
     strcpy(mudconf.string_conn, (char *)"connect");	/* String for the connect command */
     strcpy(mudconf.string_conndark, (char *)"cdark");	/* String for the dark connect */
     strcpy(mudconf.string_connhide, (char *)"chide");	/* String for the hide connect */
@@ -388,6 +403,13 @@ NDECL(cf_init)
     for ( i = 0; i < TOTEM_SLOTS; i++ ) {
        mudstate.totem_slots[i] = 0;
     }
+    for ( i = 0; i < MAXVATTRCACHE + 1; i++ ) {
+       mudstate.vattr_reuse[i] = 0;
+    }
+    mudstate.vattr_reuseptr = NOTHING;
+    mudstate.vattr_reusecnt = 0;
+    mudstate.execscript_noreg = 0;	/* execscript has no registers processed */
+    mudstate.help_shell = 0;		/* help redirection */
     mudstate.no_space_compress = 0;	/* Override space compression */
     mudstate.no_announce = 0;		/* Do not broadcast announcements */
     mudstate.global_error_inside = 0;	/* Global Error Object is being executed */
@@ -608,6 +630,7 @@ NDECL(cf_init)
     mudconf.wizcmd_quota_max = 1000;
     mudconf.cmd_quota_incr = 1;
     mudconf.control_flags = 0xffffffff;		/* Everything for now... */
+    mudconf.control_flags &= ~CF_VATTRCHECK;	/* Do not include vattr checking */
     mudconf.log_options = LOG_ALWAYS | LOG_BUGS | LOG_SECURITY |
 	LOG_NET | LOG_LOGIN | LOG_DBSAVES | LOG_CONFIGMODS |
 	LOG_SHOUTS | LOG_STARTUP | LOG_WIZARD |
@@ -843,7 +866,7 @@ NDECL(cf_init)
     mudstate.whisper_state = 0;
     mudstate.nowall_over = 0;
     mudstate.eval_rec = 0;
-    for (i = 0; i < MAX_GLOBAL_REGS; i++) {
+    for (i = 0; i < (MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST); i++) {
 	mudstate.global_regs[i] = NULL;
 	mudstate.global_regsname[i] = NULL;
 	mudstate.global_regs_backup[i] = NULL;
@@ -1046,12 +1069,13 @@ CF_HAND(cf_rlevel)
     char dup1[17], dup2[17], *nptr, tbufit[20], *strbuff, *pst;
 
     cmp_z = countwordsnew(str);
-    if ( (cmp_z < 2) || (cmp_z > 3) ) {
-	STARTLOG(LOG_STARTUP, "CNF", "LEVEL")
-        if ( cmp_z < 2 )
-           log_text("Too few arguments for reality_level. 2 to 3 expected, ");
-        else
-           log_text("Too many arguments for reality_level. 2 to 3 expected, ");
+    if ( (cmp_z < 2) || (cmp_z > 4) ) {
+        STARTLOG(LOG_STARTUP, "CNF", "LEVEL")
+        if ( cmp_z < 2 ) {
+            log_text("Too few arguments for reality_level. 2 to 4 expected, ");
+        } else {
+            log_text("Too many arguments for reality_level. 2 to 4 expected, ");
+        }
         sprintf(tbufit, "%d", cmp_z);
         log_text(tbufit);
         log_text(" found.\r\n              -->String in question: ");
@@ -1060,12 +1084,13 @@ CF_HAND(cf_rlevel)
         return 1;
     }
     if(mc->no_levels >= 32) {
-	STARTLOG(LOG_STARTUP, "CNF", "LEVEL")
+        STARTLOG(LOG_STARTUP, "CNF", "LEVEL")
         log_text("Too many levels defined. 32 maximum allowed.");
         ENDLOG
         return 1;
     }
 
+    /* Set name */
     for(i=0; *str && ((*str != ' ') && (*str != '\t')) && (i < 16); ++str) {
         if(i < 16) {
             dup1[i] = tolower(*str);
@@ -1076,53 +1101,83 @@ CF_HAND(cf_rlevel)
 
     cmp_x = sizeof(mudconf.reality_level);
     cmp_y = sizeof(mudconf.reality_level[0]);
-    if ( cmp_y == 0 )
-       cmp_z = 0;
-    else
-       cmp_z = cmp_x / cmp_y;
+    if ( cmp_y == 0 ) {
+        cmp_z = 0;
+    } else {
+        cmp_z = cmp_x / cmp_y;
+    }
     for (k = 0; (k < mudconf.no_levels) && (k < cmp_z); ++k) {
-      nptr = mudconf.reality_level[k].name;
-      j=0;
-      while (*nptr) {
-        dup2[j++] = tolower(*nptr);
-        nptr++;
-      }
-      dup2[j] = '\0';
-      if ( strcmp(dup1, dup2) == 0 ) {
-	 STARTLOG(LOG_STARTUP, "CNF", "LEVEL")
-         log_text("Duplicate RLEVEL name: ");
-         log_text(mudconf.reality_level[mc->no_levels].name);
-         ENDLOG
-         mudconf.reality_level[mc->no_levels].name[0] = '\0';
-         return 0;
-      }
+        nptr = mudconf.reality_level[k].name;
+        j = 0;
+        while (*nptr) {
+            dup2[j++] = tolower(*nptr);
+            nptr++;
+        }
+        dup2[j] = '\0';
+        if ( strcmp(dup1, dup2) == 0 ) {
+	    STARTLOG(LOG_STARTUP, "CNF", "LEVEL")
+            log_text("Duplicate RLEVEL name: ");
+            log_text(mudconf.reality_level[mc->no_levels].name);
+            ENDLOG
+            mudconf.reality_level[mc->no_levels].name[0] = '\0';
+            return 0;
+        }
     }
 
     /* If name is over 16 chars, trim off the rest */
-    if ( *str && ((*str != ' ') && (*str != '\t')) )
-       for(; *str && ((*str != ' ') && (*str != '\t')); ++str);
+    if ( *str && ((*str != ' ') && (*str != '\t')) ) {
+        for(; *str && ((*str != ' ') && (*str != '\t')); ++str);
+    }
 
     mc->reality_level[mc->no_levels].name[i] = '\0';
     mc->reality_level[mc->no_levels].value = 1;
+
+    /* Set default desc */
     strcpy(mc->reality_level[mc->no_levels].attr, "DESC");
+
+    /* Eat spaces to next value */
     for(; *str && (*str == ' ' || *str == '\t'); ++str);
+
     strbuff = alloc_lbuf("reality_loader");
     memset(strbuff, '\0', LBUF_SIZE);
     pst = strbuff;
+
+    /* Pull in bitwise mask for reality */
     while ( *str && (isxdigit((int)*str) || (ToLower(*str) == 'x')) ) {
-       *pst++ = *str++;
+        *pst++ = *str++;
     }
     q = (unsigned int)atof(strbuff);
-    
-    free_lbuf(strbuff);
-    if(q)
+
+    /* Set value if valid value */
+    if (q) {
         mc->reality_level[mc->no_levels].value = (RLEVEL) q;
-    for(; *str && ((*str == ' ') || (*str == '\t')); ++str);
-    if(*str) {
-        strncpy(mc->reality_level[mc->no_levels].attr, str, 32);
+    }
+
+    /* Eat spaces to next value */
+    for (; *str && ((*str == ' ') || (*str == '\t')); ++str);
+
+    memset(strbuff, '\0', LBUF_SIZE);
+    pst = strbuff;
+    /* Store description value */
+    while ( *str && !isspace(*str) ) {
+       *pst++ = *str++;
+    }
+    if (*strbuff) {
+        strncpy(mc->reality_level[mc->no_levels].attr, strbuff, 32);
         mc->reality_level[mc->no_levels].attr[32] = '\0';
     }
+    
+    /* Check for @adesc action for reality */
+    for(; *str && ((*str == ' ') || (*str == '\t')); ++str);
+
+    if ( *str ) {
+       mc->reality_level[mc->no_levels].has_adesc = (atoi(str) > 0 ? 1 : 0);
+    } else {
+       mc->reality_level[mc->no_levels].has_adesc = 0;
+    }
+
     mc->no_levels++;
+    free_lbuf(strbuff);
     return 0;
 }
 #endif /* REALITY_LEVELS */
@@ -1203,6 +1258,27 @@ CF_HAND(cf_int_runtime)
     }
     else
        return -1;
+}
+
+/* This only works at runtime via config */
+CF_HAND(cf_verifyint_runtime)
+{
+    int vp_old = 0;
+
+    if ( !mudstate.initializing) {
+       notify(player, "This value can only be set in the .conf file at boot time.");
+       return -1;
+    }
+
+    sscanf(str, "%d", &vp_old);
+    if ((vp_old < extra2) || (vp_old > extra)) {
+        if ( !mudstate.initializing) 
+           notify(player, unsafe_tprintf("Value must be between %d and %d.", extra2, extra));
+	return -1;
+    } else {
+        *vp = vp_old;
+	return 0;
+    }
 }
 
 CF_HAND(cf_vint)
@@ -1287,6 +1363,22 @@ CF_HAND(cf_timerint)
     }
 }
 
+CF_HAND(cf_verifyintvattr)
+{
+    int vp_old = 0;
+
+    sscanf(str, "%d", &vp_old);
+    if ((vp_old < extra2) || (vp_old > extra)) {
+        if ( !mudstate.initializing) 
+           notify(player, unsafe_tprintf("Value must be between %d and %d.", extra2, extra));
+	return -1;
+    } else {
+        *vp = vp_old;
+         mudstate.vattr_counter = mudconf.vattr_interval + mudstate.nowmsec;
+	return 0;
+    }
+}
+
 CF_HAND(cf_verifyint)
 {
     int vp_old = 0;
@@ -1301,6 +1393,7 @@ CF_HAND(cf_verifyint)
 	return 0;
     }
 }
+
 CF_HAND(cf_verifyint_mysql)
 {
     int vp_old = 0;
@@ -2840,6 +2933,84 @@ CF_HAND(cf_stringver)
     return retval;
 }
 
+CF_HAND(cf_stringtz)
+{
+    int retval, len;
+    long l_diff;
+    char *buff, *buff2, *buff3;
+    struct tm *ttm;
+    time_t tt;
+
+    /* Copy the string to the buffer if it is not too big */
+
+    if ( !str || !*str ) {
+       retval = -3;
+       if ( !mudstate.initializing ) {
+          tt = mudstate.now;
+          ttm = localtime(&tt);
+
+          buff = alloc_lbuf("cf_stringtz.LOG");
+          buff2 = alloc_lbuf("cf_stringtz2.LOG");
+          buff3 = alloc_lbuf("cf_stringtz3.LOG");
+          strcpy(buff3, (char *)"%Z");
+          len = strftime(buff2, (LBUF_SIZE - 100), buff3, ttm);
+          if ( len == 0 ) {
+             sprintf(buff, "Current timezone set: %s (invalid)", mudconf.timezone);
+          } else {
+             sprintf(buff, "Current timezone set: %s (%s)", mudconf.timezone, buff2);
+          }
+          notify_quiet(player, buff);
+          free_lbuf(buff);
+          free_lbuf(buff2);
+          free_lbuf(buff3);
+       }
+    } else {
+       if ( validate_timezones( str ) ) {
+          retval = 0;
+          l_diff = strlen(str);
+          if (l_diff >= extra) {
+             str[extra - 1] = '\0';
+             if (mudstate.initializing) {
+                STARTLOG(LOG_STARTUP, "CNF", "NFND")
+                   buff = alloc_lbuf("cf_stringtz.LOG");
+                   sprintf(buff, "%.3900s: String truncated", cmd);
+                   log_text(buff);
+                   free_lbuf(buff);
+                ENDLOG
+             } else {
+                buff = alloc_lbuf("cf_stringtz.LOG");
+                sprintf(buff, "String truncated [%ld over max of %ld characters]", l_diff - extra, extra);
+                notify(player, buff);
+                free_lbuf(buff);
+             }
+             retval = 1;
+          } else {
+             STARTLOG(LOG_STARTUP, "CNF", "TZ")
+                buff = alloc_lbuf("cf_stringtz.LOG");
+                sprintf(buff, "Current timezone set: %s", str);
+                log_text(buff);
+                free_lbuf(buff);
+             ENDLOG
+          }
+          strcpy((char *) vp, str);
+          setenv("TZ", mudconf.timezone, 1);	/* Set timezone to variable */
+          tzset();				/* Set timezone */
+       } else {
+          STARTLOG(LOG_STARTUP, "CNF", "NFND")
+             buff = alloc_lbuf("cf_stringtz.LOG");
+             sprintf(buff, "Invalid TIMEZONE specified (%d loaded): %.3900s", global_timezone_max,  str);
+             if ( !mudstate.initializing ) {
+                notify_quiet(player, buff);
+             }
+             log_text(buff);
+             free_lbuf(buff);
+          ENDLOG
+          retval = -1;
+       }
+    }
+    return retval;
+}
+
 CF_HAND(cf_string)
 {
     int retval;
@@ -3971,6 +4142,10 @@ CONF conftable[] =
      cf_acmd_access, CA_GOD | CA_IMMORTAL, NULL,
      (pmath2) access_nametab, (pmath2) access_nametab2, CA_WIZARD,
      (char *) "Configure attribute access permissions."},
+    {(char *) "atrcachemax",
+     cf_verifyint_runtime, CA_GOD | CA_IMMORTAL, &mudconf.atrcachemax, ATRCACHE_MAX, 1, CA_WIZARD,
+     (char *) "Max value allowed for atrcache caching variables.\r\n"\
+              "(Range: 1-200)               Default: 10   Value: %d"},
     {(char *) "bad_name",
      cf_badname, CA_GOD | CA_IMMORTAL, NULL, 0, 0, CA_WIZARD,
      (char *) "Specify a list of bad player names."},
@@ -4145,6 +4320,10 @@ CONF conftable[] =
     {(char *) "map_delim_space",
      cf_bool, CA_GOD | CA_IMMORTAL, &mudconf.map_delim_space, 0, 0, CA_PUBLIC,
      (char *) "MAP() uses space/separator?"},
+    {(char *) "max_api_timeout",
+     cf_verifyint, CA_GOD | CA_IMMORTAL, &mudconf.max_api_timeout, 300, 1, CA_WIZARD,
+     (char *) "Max time an API connection (in seconds) is alloweed to stay connected\r\n"\
+              "(Range: 1-300)   Default: 20   Value: %d"},
     {(char *) "max_cpu_cycles",
      cf_int, CA_GOD | CA_IMMORTAL, &mudconf.max_cpu_cycles, 0, 0, CA_WIZARD,
      (char *) "Max cpu slams allowed before smackdown.\r\n"\
@@ -4310,10 +4489,12 @@ CONF conftable[] =
     {(char *) "exec_secure",
      cf_bool, CA_DISABLED, &mudconf.exec_secure, 0, 0, CA_WIZARD,
      (char *) "Is execscript() escaping everything?"},
+    {(char *) "execscripthome",
+     cf_string, CA_GOD | CA_IMMORTAL, (int *) mudconf.execscripthome, LBUF_SIZE-1, 0, CA_WIZARD,
+     (char *) "The main home directory override where execscripts reside."},
     {(char *) "execscriptpath",
      cf_dynstring, CA_GOD | CA_IMMORTAL, (int *) mudconf.execscriptpath, LBUF_SIZE-1, 1, CA_WIZARD,
      (char *) "Specified valid sub-directories that execscript can override."},
-
     {(char *) "exit_flags",
      cf_set_flags, CA_GOD | CA_IMMORTAL, (int *) &mudconf.exit_flags, 0, 0, CA_PUBLIC,
      (char *) "These are default flags set on new exits."},
@@ -4526,6 +4707,9 @@ CONF conftable[] =
     {(char *) "goodmail_host",
      cf_dynstring, CA_GOD | CA_IMMORTAL, (int *) mudconf.goodmail_host, LBUF_SIZE-1, 1, CA_WIZARD,
      (char *) "Mail addresses to ALLOW ALWAYS from autoreg."},
+    {(char *) "guest_displaylastsite",
+     cf_bool, CA_GOD | CA_IMMORTAL, &mudconf.guest_displaylastsite, 0, 0, CA_WIZARD,
+     (char *) "Do guests show last site connected from?"},
     {(char *) "guest_randomize",
      cf_bool, CA_GOD | CA_IMMORTAL, &mudconf.guest_randomize, 0, 0, CA_WIZARD,
      (char *) "Guests connect in random order?"},
@@ -5074,6 +5258,9 @@ CONF conftable[] =
     {(char *) "permit_site",
      cf_site, CA_GOD | CA_IMMORTAL, (int *) &mudstate.access_list, 0, 0, CA_WIZARD,
      (char *) "Site permission for allowing site."},
+    {(char *) "player_absolute",
+     cf_bool, CA_GOD | CA_IMMORTAL, &mudconf.player_absolute, 0, 0, CA_PUBLIC,
+     (char *) "Player cache lookups done at location?"},
     {(char *) "player_dark",
      cf_bool, CA_GOD | CA_IMMORTAL, &mudconf.player_dark, 0, 0, CA_PUBLIC,
      (char *) "Can players set themselves/puppets dark?"},
@@ -5288,6 +5475,9 @@ CONF conftable[] =
     {(char *) "safer_passwords",
      cf_bool, CA_GOD | CA_IMMORTAL, &mudconf.safer_passwords, 0, 0, CA_PUBLIC,
      (char *) "Enforcement of harder passwords?"},
+    {(char *) "saystring_eval",
+     cf_bool, CA_GOD | CA_IMMORTAL, &mudconf.saystring_eval, 0, 0, CA_PUBLIC,
+     (char *) NULL},
     {(char *) "sconnect_cmd",
      cf_string, CA_GOD | CA_IMMORTAL, (int *) mudconf.sconnect_cmd, 31, 0, CA_WIZARD,
      (char *) NULL},
@@ -5318,6 +5508,9 @@ CONF conftable[] =
     {(char *) "see_owned_dark",
      cf_bool, CA_GOD | CA_IMMORTAL, &mudconf.see_own_dark, 0, 0, CA_PUBLIC,
      (char *) "Can you see dark things you control?"},
+    {(char *) "setqlabel",
+     cf_bool, CA_GOD | CA_IMMORTAL, &mudconf.setqlabel, 0, 0, CA_PUBLIC,
+     (char *) "Are registers that have labels protected?"},
     {(char *) "sha2rounds",
      cf_verifyint, CA_GOD | CA_IMMORTAL, &mudconf.sha2rounds, 999999, 5000, CA_WIZARD,
      (char *) "SHA2 round recursion for password encryption.\r\n"\
@@ -5377,6 +5570,10 @@ CONF conftable[] =
     {(char *) "status_file",
      cf_string, CA_DISABLED, (int *) mudconf.status_file, 128, 0, CA_WIZARD,
      (char *) "File where @shutdown commands are sent."},
+    {(char *) "strfunc_softfuncs",
+     cf_int, CA_GOD | CA_IMMORTAL, &mudconf.strfunc_softfuncs, 0, 0, CA_PUBLIC,
+     (char *) "Does strfunc allow softfunction handling.\r\n"\
+              "   1 - @fun, 2 - @fun/@lfun  Default: 0   Value: %d"},
     {(char *) "string_conn",
      cf_string, CA_GOD | CA_IMMORTAL, (int *) mudconf.string_conn, 31, 0, CA_WIZARD,
      (char *) "String that is used as the 'connect [co]' command."},
@@ -5441,6 +5638,10 @@ CONF conftable[] =
      cf_verifyint, CA_GOD | CA_IMMORTAL, &mudconf.timeslice, 100000, 1, CA_WIZARD,
      (char *) "Timeslice for next player commands (must be >0)\r\n"\
               "                             Default: 1000   Value: %d"},
+    {(char *) "timezone",
+     cf_stringtz, CA_GOD | CA_IMMORTAL, (int *) mudconf.timezone, 31, 0, CA_WIZARD,
+     (char *) "Set the mush default global timezone\r\n"\
+              "                                 (default localtime)"},
     {(char *) "trace_output_limit",
      cf_int, CA_GOD | CA_IMMORTAL, &mudconf.trace_limit, 0, 0, CA_WIZARD,
      (char *) "Limit on how much output you can have.\r\n"\
@@ -5471,6 +5672,10 @@ CONF conftable[] =
     {(char *) "vattr_command",
      cf_cmd_vattr, CA_GOD | CA_IMMORTAL, (int *) &mudstate.command_vattr_htab, 0, 0, CA_WIZARD,
      (char *) "Define dynamic VATTR commands."},
+    {(char *) "vattr_interval",
+     cf_verifyintvattr, CA_GOD | CA_IMMORTAL, &mudconf.vattr_interval, 2592000, 3600, CA_WIZARD,
+     (char *) "Timeslice for next vattr cache (must be >0)\r\n"\
+              "     (Range: 3600-2592000)    Default: 86400   Value: %d"},
     {(char *) "vercustomstr",
      cf_stringver, CA_GOD | CA_IMMORTAL, (int *) mudconf.vercustomstr, SBUF_SIZE-1, 0, CA_WIZARD,
      (char *) "Extra string used for @version\r\n"\
@@ -6066,6 +6271,7 @@ void list_options_values(dbref player, int p_val, char *s_val)
            (tp->interpreter == cf_vint) ||
            (tp->interpreter == cf_verifyint) ||
            (tp->interpreter == cf_verifyint_mysql) ||
+           (tp->interpreter == cf_verifyint_runtime) ||
            (tp->interpreter == cf_timerint) ||
            (tp->interpreter == cf_chartoint) ||
            (tp->interpreter == cf_recurseint)) &&
@@ -6088,6 +6294,7 @@ void list_options_values(dbref player, int p_val, char *s_val)
            (tp->interpreter == cf_vint) ||
            (tp->interpreter == cf_verifyint) ||
            (tp->interpreter == cf_verifyint_mysql) ||
+           (tp->interpreter == cf_verifyint_runtime) ||
            (tp->interpreter == cf_timerint) ||
            (tp->interpreter == cf_chartoint) ||
            (tp->interpreter == cf_recurseint)) &&
@@ -6206,6 +6413,9 @@ void cf_display(dbref player, char *param_name, int key, char *buff, char **bufc
           sprintf(tempbuff, "%d", SBUF_SIZE);
           safe_str(tempbuff, buff, bufc);
        }
+    } else if ( stricmp(param_name, (char *)"register_count") == 0 ) {
+       sprintf(tempbuff, "%d", MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST);
+       safe_str(tempbuff, buff, bufc);
     } else {
        if (stricmp(param_name, "sideeffects_txt") == 0) {
 	 param_name[11] = '\0';
@@ -6221,6 +6431,7 @@ void cf_display(dbref player, char *param_name, int key, char *buff, char **bufc
                if ( (tp->interpreter == cf_int) ||
                     (tp->interpreter == cf_verifyint) ||
                     (tp->interpreter == cf_verifyint_mysql) ||
+                    (tp->interpreter == cf_verifyint_runtime) ||
                     (tp->interpreter == cf_bool) ||
                     (tp->interpreter == cf_who_bool) ||
                     (tp->interpreter == cf_int_runtime) ||

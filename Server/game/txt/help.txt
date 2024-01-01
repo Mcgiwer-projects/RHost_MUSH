@@ -52,6 +52,9 @@
            cr  <name> <password>  (short for create)
            reg <name> <password>  (short for register)
   
+  Note: If you intend to see registers (setq) please check help on
+        'REGISTERS'.  It's plural.
+  
   Note:  To create/log in a character with spaces in their name, please use
          "<name>".  Ergo, surround your name with double quotes.
          The 'register' command does not allow creation with spaces.
@@ -106,18 +109,19 @@
   train     use         version      wield        whisper       who        
   worn
   
-  @@           @break       @chown      @clone      @crc32obj      @create   
-  @decompile   @destroy     @dig        @doing      @dolist        @drain 
-  @edit        @emit        @entrances  @eval       @extansi       @femit
-  @find        @force       @fpose      @fsay       @goto          @halt
-  @hide        @include     @jump       @label      @last          @link
-  @list        @listmotd    @lfunction  @lock       @lset          @ltag
-  @mailsig     @mvattr      @name       @notify     @oemit         @open 
-  @parent      @password    @pemit      @pipe       @program       @protect
-  @ps          @quitprogram @quota      @register   @robot         @search 
-  @set         @skip        @sql        @sqlconnect @sqldisconnect @stats  
-  @sudo        @sweep       @switch     @teleport   @totem         @trigger
-  @unlink      @unlock      @verb       @wait       @wall          @wipe        
+  @@         @atrcache    @break       @chown      @clone      @crc32obj    
+  @create    @decompile   @destroy     @dig        @doing      @dolist      
+  @drain     @edit        @emit        @entrances  @eval       @extansi     
+  @femit     @find        @force       @fpose      @fsay       @goto        
+  @halt      @hide        @include     @jump       @label      @last        
+  @link      @list        @listmotd    @lfunction  @lock       @lset        
+  @ltag      @mailsig     @mvattr      @name       @notify     @oemit       
+  @open      @parent      @password    @pemit      @pipe       @program     
+  @protect   @ps          @quitprogram @quota      @register   @robot       
+  @search    @set         @skip        @sql        @sqlconnect @sqldisconnect
+  @stats     @sudo        @sweep       @switch     @teleport   @totem       
+  @trigger   @unlink      @unlock      @verb       @wait       @wall        
+  @wipe        
   
 { 'help commands2' for more (attribute-commands) }
 
@@ -167,15 +171,74 @@
   MAIL                MAX ARGS           ME                  MONEY           
   MOVING              OBJECT TYPES       PARENT OBJECTS      PUPPETS         
   QUICKREFERENCE      REALITY LEVELS     REGEXPS             REGEXP SYNTAX   
-  REGEXP CLASSES      REGEXP EXAMPLES    ROBBERY             ROYALTY         
-  SEARCH CLASSES      SEMAPHORES         SENSES              SETQ_TEMPLATES  
-  SIDEEFFECTS         SINGLETHREADING    SPECIAL CHARACTERS  SPOOFING        
-  SQL                 SQLESCAPE          STACK               SUBSTITUTIONS   
-  SUCCESS             SWITCHES           TOGGLES             USEFUL          
-  UNICODE SUPPORT     USER ATTRIBUTES    VARIABLE EXITS      VATOVZ         
-  VERBS               WANDERER           WILDCARDS           WIZARD ATTRIBUTES
-  ZATOZZ              ZONES              $-COMMANDS          #LAMBDA          
+  REGEXP CLASSES      REGEXP EXAMPLES    REGISTERS           ROBBERY          
+  ROYALTY             SEARCH CLASSES     SEMAPHORES          SENSES           
+  SETQ_TEMPLATES      SIDEEFFECTS        SINGLETHREADING     SPECIAL CHARACTERS
+  SPOOFING            SQL                SQLESCAPE           STACK             
+  SUBSTITUTIONS       SUCCESS            SWITCHES            TIMEZONE
+  TOGGLES             USEFUL             UNICODE SUPPORT     USER ATTRIBUTES   
+  VARIABLE EXITS      VATOVZ             VERBS               WANDERER          
+  WILDCARDS           WIZARD ATTRIBUTES  ZATOZZ              ZONES             
+  $-COMMANDS          #LAMBDA          
   
+
+& TIMEZONE
+  Topic: TIMEZONE
+  
+  The TIMEZONE attribute (set with &TIMEZONE <target>=<string>) is used to 
+  specify the prerred timezone that the player wants.  This will override
+  the system local timezone.
+  
+  You may use the special string 'localtime' to specify you wish to use
+  the system timezone the mush runs on for the timezone.
+  
+  For a list of valid timezones, please refer to the 'listtzones()'
+  function.  By default some 600+ timezones will be available to 
+  choose from.
+  
+  Functions currently aware of timezones in this manner:
+    ptimefmt(), secstz(), msecstz(), time(), listtzones(), runintz()
+  
+  Examples of timezones you may set (but is far from all available):
+    > &TIMEZONE me=US/Eastern
+    > &TIMEZONE me=US/Hawaii
+    > &TIMEZONE me=Brazil/East
+    > &TIMEZONE me=Etc/GMT+1
+    > &TIMEZONE me=GMT
+  
+  Some functions like secstz(), msecstz() and time() allow you to specify
+  the timezone as an argument.  Using thoe functions this way will 
+  override any &TIMEZONE setting a player may have set.
+  
+  Timezones follow the following logic for lookup:
+
+  function-argument -> timezone on player -> localtime.
+  
+  Any invalid timezone lookup will default back to GMT time and NOT
+  localtime.
+  
+  Refer to 'timezone error handling' for how timezones handle errors.
+  
+  Note: runintz() can be used to run functions in a specified timezone.
+   
+  See Also: listtzones(), secstz(), msecstz(), time(), runintz()
+ 
+& TIMEZONE ERROR HANDLING
+  Topic: TIMEZONE (error handling)
+  
+  An invalid timezone entered in a timezone aware function like time(),
+  secstz(), or msecstz() will warn the player (or enactor) of the
+  invalid timezone then fall back to GMT time.
+  
+  To repeat.  This falls back to GMT time.  It does NOT fall back
+  to the local time of the server, which may not be what you 
+  expect.   
+  
+  This follows procedure of what would happen if you set an invalid
+  timezone on a physial server.  It will fall back to GMT time.
+  
+  You may use listtzones() to check for system recognized timezones.
+   
 & API
   Topic: API
   
@@ -203,6 +266,10 @@
   
   POST Example: (this is from a command line using the 'curl' application)
 > curl -X POST --user "#12:ya" -H "Exec: @emit hi." --head http://localhost:2222
+  
+  Note: You may have multiple GET and POST responses in a single connection.
+        To utilize this specify -H "Keep-Alive: timeout=xx" where 'XX' is
+        the desired connection value (1-300)
   
   To have a target dbref# enabled for API processing, please alert a staff
   on your game as it requires staff approval and authentication to enable
@@ -2522,8 +2589,15 @@
   Note: If you are paging people with spaces in their name, start the page
         with a comma.  i.e.  page ,player with space, player2 = message
   
-  You may use the &PAGEFORMAT and &OUTPAGEFORMAT attributes for format
+  You may use the &PAGEFORMAT and &OUTPAGEFORMAT attributes to format
   incoming and outgoing pages.
+  
+  Switches available:
+     /noansi   -- show raw ansi (the %c/%x substitutions) instead of colors.
+     /port     -- page to the specified port (wizard only).
+     /location -- if no <message> will page the player with your location.
+  
+  Note: /noeval can be emulated by starting page with the ] command.
   
   <control> is the formatter for the page (", ;, :, etc)
   
@@ -2534,37 +2608,43 @@
   name on the WHO list.  You may specify from one to more players in a page 
   and you can use a comma to delimit the player list instead of a space for
   players that contain spaces in their names.  You can not however, mix 
-  commas and spaces.
+  commas and spaces.  
  
-  You can format the message one of several ways by specifying ':', ';', or
-  '"' as the first character of the message.  ':' and ';' format the message
-  as 'From afar, <player> <message>', with ';' omitting the space between
-  <player> and <message>.  '"' formats the message in normal page format
-  (this is the default).
-  
-  Switches available:
-    noansi -- show raw ansi (the %c/%x substitutions) instead of colors.
+  You can format the message with <control> one of several ways.
+    :<message> -- poses <space>    (ie: From afar, myname foo.)
+    ;<message> -- possessive poses <no space>    (ie: From afar, mynamefoo)
+    "<message> -- normal page (default)    (ie: myname pages: foo)
  
 { 'help page2' for more }
   
 & page2  
-  If your Idle attribute is set to something, then it is sent to anyone
-  who successfully pages you.  This is useful for when you are away from
-  your terminal for a short while.
+  Command: p[age] (continued)
   
-  You can selectively disable pages from certain players with the '@lock/page'
-  command (players must pass the lock in order to page you).  If someone
-  cannot page you, they will be sent a message including of your Reject
-  attribute if they try.  If someone pages you while you are not connected,
-  they are sent a message including your Away attribute.
+  @idle attribute:
+      If your Idle attribute is set to something, then it is sent to anyone
+      who successfully pages you.  This is useful for when you are away from
+      your terminal for a short while.  This attribute is evaluated.
+  
+  @lock/page and @reject attribute:
+      You can selectively disable pages from certain players with the 
+      '@lock/page' command (players must pass the lock in order to page you).
+      If someone cannot page you, they will be sent a message including of 
+      your Reject attribute if they try.  If someone pages you while you are 
+      not connected, they are sent a message including your Away attribute.
    
-  Everyone you page is stored so that you may repeat the page to the entire
-  list using the 'lpage' command.  To respond to someone who just paged you,
-  you may use the 'rpage' command.
+  lp[age], rp[age], mrp[age]:
+      Everyone you page is stored so that you may repeat the page to the entire
+      list using the 'lpage' command.  To respond to someone who just paged 
+      you, you may use the 'rpage' command or mrpage to the entire list.
   
-  NOTE:  You may set the MUXPAGE @toggle (@toggle me=muxpage) so that page
-         works similiar to how you expect in MUX/TM3.  'lp' will still work
-         the same.
+  &pageformat, &outpageformat:
+      These are useful to customize the output of outgoing and incoming page
+      messages.
+  
+  Toggles useful for page:
+      MUXPAGE (@toggle) -- makes page behave like MUX/TM3 so that you can 
+                           repage someone without an equal sign.
+      VPAGE (@toggle)   -- Shows the primary alias of anyone who pages you.
   
   See Also: pose, say, whisper, :, ;, ", }, ], \\, @pemit, @away, @idle,
             @reject, rpage, lpage, mrpage, PAGEFORMAT, OUTPAGEFORMAT
@@ -3166,7 +3246,7 @@
   inside.
  
   Example:
-     @va me=$foobar *:@fo #1234=%0;@@ This controls my foobar puppet.
+     @va me=$foobar *:@fo #12345=%0;@@ This controls my foobar puppet.
   
   See Also: @break, @assert, idle
   
@@ -3197,6 +3277,291 @@
       Before assert
   
   See Also: $-COMMAND, @@, @break, @skip, @jump, @rollback, @goto
+
+& @atrcache
+  Command: @atrcache[/switch(es)] <cachename/slot> [=<target/value>]
+  
+  The @atrcache command is ued to cache out the EXECUTION of a string so
+  that it won't have to keep evaluating this until the next interval 
+  specified.  This is intended to be used for heavy use cases where
+  execution of code can have a huge performance hit or on something
+  that would be called intensely in a loop that could also cause delay,
+  lage, or intensive loads.
+  
+  The maximum caches are handled by a config parameter.  10 default
+  with an absolute maximum being 200.
+  
+  On system start (or reboot) all caches are unitialized and any
+  cached values will have been cleared.
+      
+  The following switches exist for the command.  Individual help is
+  availalbe for each one.
+      @atrcache/init <cacheslot> = <name to use>
+        -- initialize the cache slot for use.
+      @atrcache/delete <cacheslot/cachename>
+        -- uninitialize and deallocate cache slot.
+      @atrcache/name <cacheslot or cachename> = <newname>
+        -- rename the specified cache slot.
+      @atrcache/owner <cacheslot or cachename> = <new owner>
+        -- specify the new owner for the specified cache slot.
+      @atrcache/visible <cacheslot or cachename> = <boolean>
+        -- toggle if the cache slot is globally avaialble to fetch
+      @atrcache/lock <cacheslot or cachename> = <boolean>
+        -- toggle enforcing of recaching by owner or control.
+      @atrcache/fetch <cacheslot or cachename>
+        -- fetch the cache (useful for testing)
+      @atrcache/interval <cacheslot or cachename> = <value>
+        -- specify the new interval for recaching the cache
+      @atrcache/cache <cacheslot or cachename>
+        -- force recache the specified cache slot
+      @atrcache/list [0 for all, or page value]
+        -- give overview summary of all cache slots
+      @atrcache/info[/noansi] <cacheslot or cachename>
+        -- give detailed information of the specified cache.
+      @atrcache/set <cacheslot or cachename> = <evaluated string>
+        -- assign the cache slot the string to be executed for caching
+      @atrcache/noansi  
+        -- used with the /info switch to supress ansi output
+  
+  Indivitual help is available on each switch with 'help @atrcache/switchname'
+  
+  See Also: atrcache(), %-h
+
+& @atrcache/init
+  Command: @atrcache/init <cache slot> = <name>
+  
+  This command is Immortal only.
+  
+  This command, part of the @atrcache command switches, will initialize the 
+  specified cache slot with the specified name.  If the cache slot is
+  outside of range and error will occur.
+  
+  A valid name is a unique name that starts with an alpha letter, and is a 
+  single word without white space or special characters.  This name is
+  case insensitive.  Names must be 30 characters or less.
+  
+  Example:
+    > @atrcache/init 5=MyTest
+    @atrcache/init: Slot 5 [mytest] has been enabled and initialized.
+  
+  See Also: @atrcache/delete, @atrcache/info, @atrcache/list
+
+& @atrcache/delete
+  Command: @atrcache/delete <cache slot or name>
+  
+  This command, part of the @atrcache command switches, will uninitialize
+  the specified slot.  It does this by removing the name, the cached data,
+  and the exec cache buffer and then deallocates those buffers back to the
+  game system for re-use.
+  
+  This will also tag the specified cache slot as inactive.
+  
+  Example:
+    > @atrcache/delete mytest
+    @atrcache/delete: Cache slot 5 [mytest] has been de-allocated and uninit...
+  
+  See Also: @atrcache/init, @atrcache/info, @atrcache/list
+ 
+& @atrcache/name
+  Command: @atrcache/name <cache slot or name> = <new name>
+  
+  This command, part of the @atrcache command switches, will rename the
+  specified slot with the new name.  You can not name caches that
+  are not in use.
+  
+  A valid name is a unique name that starts with an alpha letter, and is a 
+  single word without white space or special characters.  This name is
+  case insensitive.  Names must be 30 characters or less.
+  
+  Example:
+    > @atrcache/name mytest=mynewtest
+    @atrcache/name: Slot 5 [mytest] renamed to 'mynewtest'.
+  
+  See Also: @atrcache/init, @atrcache/info, @atrcache/list
+
+& @atrcache/owner
+  Command: @atrcache/owner <cache slot or name> = <new owner>
+  
+  This command, part of the @atrcache command switches, will change the
+  owner (and thus who controls) the specified cache slot.  Be aware that
+  all cache executions are done *at the owner's level*.  This could
+  be a security risk or return results that may not be expected.
+  
+  Be aware that if at any reason the owner doesn't exist, maybe an
+  object or player being purged who was an owner, while the cache slot
+  will still fetch the existing cached data, NEW CACHE UPDATES will
+  be disabled until this is resolved.
+   
+  Example:
+    > @atrcache/owner mytest=*Tester
+    @atrcache/owner: Slot 5 [mynewtest] owner changed from #12345
+          [Ashen-Shugar] to #17396 [Tester]
+  
+  See Also: @atrcache/init, @atrcache/info, @atrcache/list
+  
+& @atrcache/visible
+  Command: @atrcache/visible <cache slot or name> = <boolean>
+  
+  This command, part of the @atrcache command switches, will toggle
+  the specified cache to be visible.  A cache that is visible is
+  globally fetchable by anyone or anything in the game.  
+  
+  If the 'lock' security mode is disabled, then visible being toggled 
+  WILL RECACHE the cache slot once the cache slot exceeds the interval.
+  
+  Immortals will always trigger the cache upon interval and will always
+  be able to see caches despite the visibility.
+  
+  Example:
+    > @atrcache/visible mynewtest=1
+    @atrcache/visible: Slot 5 [mynewtest] visibility changed from 0 to 1.
+  
+  See Also: @atrcache/init, @atrcache/info, @atrcache/list, @atrcache/lock
+
+& @atrcache/lock
+  Command: @atrcache/lock <cache slot or name> = <boolean>
+  
+  This command, part of the @atrcache command switches, will toggle
+  the specified cache to be locked.  This is the default value.  Once
+  a cache is 'locked' it requires being fetched by someone who owns
+  or controls the cache for the cache slot to re-cache upon exceeding
+  the interval.  This provides added protection against globaly
+  visible cache slots.
+  
+  Immortals will always trigger the cache upon interval.
+  
+  Example:
+    > @atrcache/lock mynewtest=1
+    @atrcache/lock: Slot 5 [mynewtest] lock changed from 1 to 1.
+  
+  See Also: @atrcache/init, @atrcache/info, @atrcache/list, @atrcache/visible
+
+& @atrcache/fetch
+  Command: @atrcache/fetch <cache slot or name>
+  
+  This command, part of the @atrcache command switches, will fetch the cache
+  from the specified cache slot.  If the interval is exceeded it will
+  cause the cache to re-cache the value beofre displaying it on the fetch.
+  
+  This command follows the /lock and /visible permissions accordingly.
+  
+  Example:
+    > @atrcache/fetch mynewtest
+      #12345
+  
+  See Also: @atrcache/init, @atrcache/info, @atrcache/list, @atrcache/visible,
+            @atrcache/set, @atrcache/cache, atrcache(), %-h
+
+& @atrcache/interval
+  Command: @atrcache/interval <cache slot or name> = <interval>
+  
+  This command, part of the @atrcache command switches, will set the 
+  interval that the cache slot will re-cache the value to be fetched.
+  This value is in seconds and must be 60 seconds or greater with
+  one exception.
+  
+  If the interval is set to '0' then the cache will process on every new
+  command specified.  This is especially useful in any internal lookups
+  and executions of attributes, such as lock evaluations, that may trigger
+  multiple times for a single command. 
+  
+  The interval always defaults to 3600 (1 hour) on initialization.
+  
+  Example:
+    > @atrcache/interval mynewtest=60
+    @atrcache/interval: Slot 5 [mynewtest] interval changed from 3600 to 60.
+  
+  See Also: @atrcache/init, @atrcache/info, @atrcache/list, @atrcache/visible
+
+& @atrcache/cache
+  Command: @atrcache/cache <cache slot or name>
+  
+  This command, part of the @atrcache command switches, will force the
+  cache slot to re-cache the value for fetching.
+  
+  This follows all rules of Immortal, visibility and locks.
+  
+  Example:
+    > @atrcache/cache mynewtest
+  
+  See Also: @atrcache/init, @atrcache/info, @atrcache/list, @atrcache/visible,
+            @atrcache/set, @atrcache/fetch, atrcache(), %-h
+
+& @atrcache/list
+  Command: @atrcache/list
+           @atrcache/list 0
+           @atrcache/list <page value>
+  
+  This command, part of the @atrcache command switches, will list the caches
+  that are currently defined.
+  
+  Immortals will see all caches, even those not currently in use or
+  initialized.  
+  
+  Normal players will only see caches that are visible to them or they
+  control.
+  
+  Immortals will see more information on lists than other players including
+  if the cache is Enabled, Disabled, or if the enabled cache has a BadOwner.
+  
+  Example:
+    > @atrcache/list
+    Slot Name                           Interval   Fetched             Control   
+    --------------------------------------------------------------------------
+    005  mynewtest                      60         1651470439          Yes       
+    -- Page:  0/ 1 -----------------   1 Visible,   1 Controlled, 101 Total --
+  
+  See Also: @atrcache/init, @atrcache/info, @atrcache/list, @atrcache/visible
+
+& @atrcache/set
+  Command: @atrcache/set <cache slot or name> = <string to evaluate>
+  
+  This command, part of the @atrcache command switches, will set the cache
+  to the specified string.  Upon fetching, this string is evaluated per the
+  owner specified as 'owner' in the cache.
+  
+  You must control the cache slot to be able to set the value.
+    
+  If the owner is invalid, the cache will not be updated.
+  
+  Example:
+    > @va me=[lwho()]
+    Set.
+    > @atrcache/set mynewtest=[v(va)]
+    @atrcache/set: Cache value set to slot 5 [mynewtest].
+  
+  See Also: @atrcache/init, @atrcache/info, @atrcache/list, @atrcache/visible,
+            @atrcache/lock, @atrcache/cache, @atrcache/fetch
+
+& @atrcache/info
+& @atrcache/noansi
+& @atrcache/noansi/info
+& @atrcache/info/noansi
+  Command: @atrcache/info[/noansi] <cache slot or name>
+  
+  This command, part of the @atrcache command switches, will display detailed
+  information about the cache slot specified.  You must control or own the 
+  cache slot to be able to garner information about it.
+  
+  This information is the same between Immortal and normal owners.
+    
+  Example:
+    > @cache/info/noansi mynewtest
+    -------------------------------------------------------------------------
+    Slot: 5   Name: mynewtest                        
+    Visible: 1  Locked: 1  Enabled: True
+    Owner: #17396 [Tester]
+    Interval: 60
+    Last Fetched: 0 [Never Fetched]
+    --------------------------------------------------------------------------
+    Cache: #12345
+    --------------------------------------------------------------------------
+    Exec-: [lwho()]
+    --------------------------------------------------------------------------
+  
+  See Also: @atrcache/init, @atrcache/info, @atrcache/list, @atrcache/visible,
+            @atrcache/lock, @atrcache/cache, @atrcache/fetch
+
 
 & @break
   Command: @break[/switch] <value> [=<command(s)>]
@@ -3361,11 +3726,11 @@
     /preserve -- Preserve the wildcard pattern and wipe everything else.
   
   Example:
-    > @cluster/wipe #1234/va*
+    > @cluster/wipe #12345/va*
     Cluster wipe: 24 total objects, 0 no-match, 0 safe, 4 attributes wiped.
-    > @cluster/wipe/regexp #1234/^..$
+    > @cluster/wipe/regexp #12345/^..$
     Cluster wipe: 24 total objects, 0 no-match, 0 safe, 22 attributes wiped.
-    > @cluster/wipe/owner Corum/#1234/va*
+    > @cluster/wipe/owner Corum/#12345/va*
     Cluster wipe: 24 total objects, 0 no-match, 0 safe, 4 attributes wiped.
   
   See Also: clusters, cluster functions, cluster commands, >
@@ -3709,9 +4074,12 @@
       /regexp  - use regular expression matching
       /tree    - Examine based on Penn trees using '`' as a separator.
       /tf      - allows prefix formatting for clients.
+      /db      - changes dbref# of target instead of name
       /noextra - when used in junction with /tf removes the additional
                  flags and other information from attribute displaying.
       /tags    - Show just @tag/adds
+  
+  Note: /db and /tf can not be used together.
   
   Example: @decompile MyObject/attr*
            @decompile MyObject
@@ -3755,6 +4123,7 @@
 & @dig
   Command: @dig[/<switches>] <name> [=<exitlist> [, <exitlist>]]
            @dig[/<switches>] <free dbref#> <name> [=<exitlist> [, <exitlist>]]
+           @dig[/<swi>] <db#> <name> [=<db#> <exitlist> [, <db#> <exitlist>]]
   
   Creates a new room with the specified name and displays its number. This 
   command costs 10 coins. If the [= <exitlist>] option is used, an exit will
@@ -3774,7 +4143,8 @@
   the Obvious exits list.
   
   The optional <free dbref#> can be used if you have permission to specify
-  the free dbref# to use.
+  the free dbref# to use.  This is useable with the room, and/or both 
+  optional exits.
    
   The following switches are available:
     /teleport - You are @teleported to the room after it is created 
@@ -3786,19 +4156,26 @@
   You may use the lastcreate() function to see the last room that @dig'd.
   
   Examples:
+    > think loc(me)
+    #12345
     > @dig A Room=Exit In <EI>;exit in;ei,Exit Out <EO>;exit out;eo
     A Room created with room number 17506.
-    Opened.
-    Linked.
-    Opened.
-    Linked.
+    Opened (#17507)
+    Linked (#17506)
+    Opened.(#17508)
+    Linked.(#12345)
   
     > @dig/ansi [ansi(hb,Blue Room)]=[ansi(hb,Exit In)] [ansi(hr,<EI>)]
     Ansi string entered for Blue Room of 'Blue Room'.  (This would be blue)
     Blue Room created with room number 17503.
     Ansi string entered for Exit In <EI> of 'Exit In <EI>'. (this would be red)
-    Opened.
-    Linked.
+    Opened (#17504)
+    Linked (#17503)
+  
+  Note:  The room will still be dug even if the exits specified to it 
+         are invalid or unable to be created.  This is because of the ordering
+         of execution as the room must be created prior to the exits being
+         attempted.
   
   See Also: @destroy, @link, @open, LINKING, TYPES OF OBJECTS,
             lastcreate(), @create, @open, @stats
@@ -4400,11 +4777,18 @@
   
   See Also: %_, SUBSTITUTIONS, TRACE, trace(), @label, ruler()
 
+& last
+& lastsite
 & @last
   Command: @last <player>
   This command displays a short 'connection history' for <player>, showing
   recent successful and failed connection attempts, as well as the total
   number of successful and failed connections.
+  
+  Information that can be pulled from attributes is located in:
+      LAST     -- the last time a player connected
+      LASTSITE -- site a player last connected from.
+     
   You can only display information about yourself or people you control.
   
 & @link
@@ -5396,10 +5780,10 @@
   automatically opened in the room that the new exit goes TO and which is
   linked back to where you are.  
   
-              I.e.  @open north;n=#1234,south;s
+              I.e.  @open north;n=#12345,south;s
   
-  This would open exit 'north;n' from here to #1234, and an exit 'south;s'
-  from #1234 to here, assuming you have rights to open exits and link to
+  This would open exit 'north;n' from here to #12345, and an exit 'south;s'
+  from #12345 to here, assuming you have rights to open exits and link to
   the rooms in question.
   
   The optional <free dbref#> can be used if you have permission to specify
@@ -5418,13 +5802,13 @@
   You may use the lastcreate() function to see the last thing @open'd
   
   Examples:
-    > @open North <N>;north;n=#1234,South <S>;south;s
+    > @open North <N>;north;n=#12345,South <S>;south;s
     Opened.
     Linked.
     Opened.
     Linked.
   
-    > @open/ansi [ansi(hb,North <N>)];north;n=#1234,[ansi(hr,South <S>)];south;s
+    > @open/ansi [ansi(hb,North <N>)];north;n=#12345,[ansi(hr,South <S>)];south;s
     Ansi string entered for North <N> of 'North <N>'. (this is in blue)
     Opened.
     Linked.
@@ -5918,12 +6302,12 @@
   The following sanity checks are performed for tags:
   
   * Tagnames cannot be more than 30 characters in length
-  * Tagnames cannot contain whitespace.
+  * Tagnames can only contain alphanumeric, _, -, and unicode characters
+  * Tagnames cannot be all numbers (to avoid conflict with dbrefs)
   * Tags need to be supplied with a valid, existing object's #dbref on
     creation.  This object you must own or control in some manner.
   * Up to 5 tags can reference the same #dbref.  If global tags exceed
     this number, local tags can no longer be assigned.
-  * Unicode is valid in tagnames!
   * On destruction of an object, all referencing tags get also removed.
   * Global tags have precedence over local tags.
   
@@ -9140,10 +9524,15 @@
  
   Sets the gender for <object>, which is used to determine which pronouns to
   use when replacing %p, %o, %s, and %a parameters in messages that apply to
-  <object>.  Genders that start with M or m are considered male, those
-  starting with F, f, W, or w are considered female, those starting with
-  P or p are considered plural, and anything else is considered neuter.
- 
+  <object>.  
+  
+  Genders for the following substitutions are triggered if @sex starts with
+  the following letters:
+      m/M           -- male     (he/him/his)
+      f/F/w/W       -- female   (she/her/hers)
+      p/P           -- plural   (they/them/thirs)
+      Anything else -- neuter   (it/it/its)
+  
   Optional switches are /quiet to suppress output or /noisy to give 
   verbose output.
  
@@ -9193,6 +9582,9 @@
 & @saystring
   Command: @saystring[/<switch>] <object> = <string>
   
+  Note: By default this does not evaluate.  If the config parameter
+        saystring_eval is enabled, this will evaluate.
+  
   Sets the substitute string that is used instead of the default 'says' when
   you talk in a location.  
   
@@ -9213,6 +9605,18 @@
   Set.
   > "hello
   Player barks "hello"
+  > think config(saystring_eval)
+  0
+  > @saystring me=[pickrand(foo bar)]
+  Set.
+  > "hello
+  Player [pickrand(foo bar)] "hello"
+  > think config(saystring_eval)
+  1
+  > "hello
+  Player foo "hello"
+  > "hello
+  Player bar "hello"
   
   See Also: say, ", safelog toggle
   
@@ -11155,6 +11559,8 @@
   
   - Thanks to Exaurdon for endless braincells fried helping Lensman with bugs.
   
+  - Thanks to David Kolf for dkjson.lua
+  
   - Thanks to several people and organizations that are too numerous to mention
   
 & DROP-TOS
@@ -11283,6 +11689,14 @@
   
   See Also: get, look, @afail, @fail, @lock, @ofail, SHOWFAILCMD
   
+& TOTEMS
+  Topic: TOTEMS
+  
+  This is a super set of FLAGS and TOGGLES.  This is in progress of
+  migrating all flags and totems to.  This description will expand
+  as the process continues in the future.
+  
+  See Also: @totem, FLAGS, TOGGLES
 & FLAGS
   Topic: FLAGS
  
@@ -11298,8 +11712,47 @@
   or 'help flag list'. For more specific information on a particular flag,
   request help on the flag's name, as in 'help ENTER_OK'.
   
-  See Also: FLAG LIST
+  See Also: @set, FLAG LIST, TOTEMS, TOTEM LIST
   
+& TOTEM LIST
+  Topic: TOTEM LIST
+  
+  Flag  Title        Flag  Title           Flag  Title      Flag  Title
+  -------------------------------------------------------------------------
+   {a}  SETQLABEL
+  
+  See Also: flag list, toggle list, attribute flags
+  
+  For information on a particular totem, type 'help <totemname>'.
+  If you do not receive the expected result, try: 'help <totemname> totem'
+
+& SETQLABEL TOTEM
+  Totem: SETQLABEL
+  
+  The SETQLABEL totem is used on a target to enforce protection of any
+  register that has a label.  This is in reference to registers set
+  with the setq/setr functions.  The method of setting the label can
+  be done with the penn_setq enabled feature or with the non-standard
+  method.
+  
+  Example: [without penn_setq disabled -- think config(penn_setq) ]
+    > say [setq(0,foo,bar)]%q<bar> [setq(0,moo)]%q<bar>
+    You say "foo moo"
+    > @totem me=setqlabel
+    Set.
+    > say [setq(0,foo,bar)]%q<bar> [setq(0,moo)]%q<bar>
+    You say "foo #-1 GLOBAL REGISTER '0' LABEL PROTECTEDfoo"
+  
+  Examples: [with penn_setq enabled -- think config(penn_setq) ]
+    > say [setq(bar,foo)]%q<bar> [setq(0,moo)]%q<bar>
+    You say "foo moo"
+    > @totem me=setqlabel
+    Set.
+    > say [setq(bar,foo)]%q<bar> [setq(0,moo)]%q<bar>
+    You say "foo #-1 GLOBAL REGISTER '0' LABEL PROTECTEDfoo"
+  
+  See Also: setq(), setr(), %q, r(), REGISTERS
+
 & FLAG LIST
   Topic: FLAG LIST
  
@@ -11320,7 +11773,7 @@
     = - BYEROOM        < - ANSI              > - ANSICOLOR    z - CONTROL_OK
     - - NO_FLASH
  
-  See Also: flag list2, attribute flags
+  See Also: flag list2, attribute flags, totem list
   
   For information on a particular flag, type 'help <flagname>'.
   If you do not receive the expected result, try: 'help <flagname> flag'
@@ -11342,7 +11795,7 @@
     4 - MARKER4        5 - MARKER5        6 - MARKER6        7 - MARKER7
     8 - MARKER8        9 - MARKER9        $ - COMMANDS
   
-  See Also: flag list, attribute flags, flag aliases
+  See Also: flag list, attribute flags, flag aliases, totem list
   
   For information on a particular flag, type 'help <flagname>'.
   If you do not receive the expected result, try: 'help <flagname> flag'
@@ -11674,123 +12127,124 @@
  
   Help is available for the following functions:
  
- @@()               ABS()              ACCENT()            ACOS()        
- ADD()              AFTER()            AINDEX()            AIINDEX()         
- ALPHAMAX()         ALPHAMIN()         AND()               ANDCHR()        
- ANDFLAG()          ANDFLAGS()         ANDTOTEM()          ANDTOTEMS()
- ANSI()             ANSIPOS()          APOSS()             ARGS()
- ARRAY()            ART()              ASC()               ASIN()           
- ATAN()             ATAN2()            ATTRCNT()           ATTRPASS()        
- AVG()              BEFORE()           BETWEEN()           BITTYPE()        
- BOUND()            BRACKETS()         CAND()              CAPSTR()   
- CASE()             CASEALL()          CAT()               CEIL()  
- CENTER()           CHARIN()           CHAROUT()           CHKREALITY()
- CHKTRACE()         CHOMP()            CHR()               CITER() 
- CLONE()            CLUSTER_ADD()      CLUSTER_ATTRCNT()   CLUSTER_DEFAULT()
- CLUSTER_EDEFAULT() CLUSTER_FLAGS()    CLUSTER_GET()       CLUSTER_GET_EVAL()
- CLUSTER_GREP()     CLUSTER_HASATTR()  CLUSTER_HASFLAG()   CLUSTER_LATTR() 
- CLUSTER_REGREP()   CLUSTER_REGREPI()  CLUSTER_SET()       CLUSTER_STATS()   
- CLUSTER_U()        CLUSTER_U2()       CLUSTER_U2DEFAULT() CLUSTER_U2LDEFAULT()
- CLUSTER_U2LOCAL()  CLUSTER_UDEFAULT() CLUSTER_UEVAL()     CLUSTER_ULDEFAULT()
- CLUSTER_ULOCAL()   CLUSTER_VATTRCNT() CLUSTER_WIPE()      CLUSTER_XGET()  
- CMDS()             CNAME()            COLORS()            COLUMNS() 
- COMP()             CON()              CONFIG()            CONN()             
- CONTROLS()         CONVSECS()    
+ @@()                 ABS()              ACCENT()           ACOS()        
+ ADD()                AFTER()            AINDEX()           AIINDEX()         
+ ALPHAMAX()           ALPHAMIN()         AND()              ANDCHR()        
+ ANDFLAG()            ANDFLAGS()         ANDTOTEM()         ANDTOTEMS()
+ ANSI()               ANSIPOS()          APOSS()            ARGS()
+ ARRAY()              ART()              ASC()              ASIN()           
+ ATAN()               ATAN2()            ATRCACHE()         ATTRCNT()         
+ ATTRPASS()           AVG()              BEFORE()           BETWEEN()         
+ BITTYPE()            BOUND()            BRACKETS()         CAND()            
+ CAPSTR()             CASE()             CASEALL()          CAT()             
+ CEIL()               CENTER()           CHARIN()           CHAROUT()          
+ CHKREALITY()         CHKTRACE()         CHOMP()            CHR()              
+ CITER()              CLONE()            CLUSTER_ADD()      CLUSTER_ATTRCNT()  
+ CLUSTER_DEFAULT()    CLUSTER_EDEFAULT() CLUSTER_FLAGS()    CLUSTER_GET()      
+ CLUSTER_GET_EVAL()   CLUSTER_GREP()     CLUSTER_HASATTR()  CLUSTER_HASFLAG()  
+ CLUSTER_LATTR()      CLUSTER_REGREP()   CLUSTER_REGREPI()  CLUSTER_SET()      
+ CLUSTER_STATS()      CLUSTER_U()        CLUSTER_U2()       CLUSTER_U2DEFAULT()
+ CLUSTER_U2LDEFAULT() CLUSTER_U2LOCAL()  CLUSTER_UDEFAULT() CLUSTER_UEVAL()    
+ CLUSTER_ULDEFAULT()  CLUSTER_ULOCAL()   CLUSTER_VATTRCNT() CLUSTER_WIPE()    
+ CLUSTER_XGET()       CMDS()             CNAME()            COLORS()          
+ COLUMNS()            COMP()             CON()              CONFIG()           
+ CONN()               CONTROLS()         CONVSECS()    
   
 { 'help function list2' for more }
   
 & FUNCTION LIST2
 
-  CONVTIME()      COR()           COS()          CRC32()       CRC32OBJ()
-  CREATE()        CREATETIME()    CREPLACE()     CTU()         DEC()       
-  DECODE64()      DECRYPT()       DEFAULT()      DELETE()      DELEXTRACT()
-  DESTROY()       DICE()          DIG()          DIGEST()      DIST2D()    
-  DIST3D()        DIV()           E()            EDEFAULT()    EDIT()      
-  EDITANSI()      EE()            ELIST()        ELEMENTPOS()  ELEMENTS()  
-  ELEMENTSMUX()   ELOCK()         EMIT()         ENCODE64()    ENCRYPT()   
-  ENTRANCES()     EQ()            ERROR()        ESCAPE()      ESCAPEX()   
-  ESCLIST()       EVAL()          EXIT()         EXP()         EXTRACT()   
-  EXTRACTWORD()   FBETWEEN()      FBOUND()       FDIV()        FILTER()    
-  FINDABLE()      FIRST()         FLAGS()        FLOOR()       FLOORDIV()  
-  FOLD()          FOLDERCURRENT() FOLDERLIST()   FOREACH()     FULLNAME()  
-  GARBLE()        GET()           GET_EVAL()     GLOBALROOM()  GRAB()      
-  GRABALL()       GREP()          GT()           GTE()         GUILD()     
-  HASATTR()       HASATTRP()      HASFLAG()      HASTOGGLE()   HASTOTEM()  
-  HASTYPE()       HASQUOTA()      HASRXLEVEL()   HASTXLEVEL()  HOME()      
-  IBREAK()        IDLE()          IFELSE()       IINDEX()      ILEV()      
-  INC()           INDEX()         INF()          INPROGRAM()   INSERT()    
-  INUM()          INZONE()        ISALNUM()      ISALPHA()     ISCLUSTER() 
-  ISDBREF()       ISDIGIT()       ISHIDDEN()     ISNUM()       ISOBJID()   
-  ISPUNCT()       ISSPACE()       ISTAG()        ISWORD()      ISXDIGIT()  
-  ITER()          ITEXT()         KEEPFLAGS()    KEEPTYPE()    LADD()      
-  LAND()          LAST()          LASTCREATE()   LATTR()       LAVG()      
-  LCMDS()         LCON()          LCSTR()        LDELETE()     LDIV()      
-  LEMIT()         LEFT()          LEXITS()       LFLAGS()      LINK()      
-  LIST()          LISTCOMMANDS()  LISTDIFF()     LISTFUNCTIONS()
+  CONVTIME()      COR()           COS()         CRC32()        CRC32OBJ()
+  CREATE()        CREATETIME()    CREPLACE()    CTU()          DEC()       
+  DECODE64()      DECRYPT()       DEFAULT()     DELETE()       DELEXTRACT()
+  DESTROY()       DICE()          DIG()         DIGEST()       DIST2D()    
+  DIST3D()        DIV()           E()           EDEFAULT()     EDIT()      
+  EDITANSI()      EE()            ELIST()       ELEMENTPOS()   ELEMENTS()  
+  ELEMENTSMUX()   ELOCK()         EMIT()        ENCODE64()     ENCRYPT()   
+  ENTRANCES()     EQ()            ERROR()       ESCAPE()       ESCAPEX()   
+  ESCLIST()       EVAL()          EXIT()        EXP()          EXTRACT()   
+  EXTRACTWORD()   FBETWEEN()      FBOUND()      FDIV()         FILTER()    
+  FINDABLE()      FIRST()         FLAGS()       FLOOR()        FLOORDIV()  
+  FOLD()          FOLDERCURRENT() FOLDERLIST()  FOREACH()      FULLNAME()  
+  GARBLE()        GET()           GET_EVAL()    GLOBALROOM()   GRAB()      
+  GRABALL()       GREP()          GT()          GTE()          GUILD()     
+  HASATTR()       HASATTRP()      HASFLAG()     HASTOGGLE()    HASTOTEM()  
+  HASTYPE()       HASQUOTA()      HASRXLEVEL(   HASTXLEVEL()   HOME()      
+  IBREAK()        IDLE()          IFELSE()      IINDEX()       ILEV()      
+  INC()           INDEX()         INF()         INPROGRAM()    INSERT()    
+  INUM()          INZONE()        ISALNUM()     ISALPHA()      ISCLUSTER() 
+  ISDBREF()       ISDIGIT()       ISHIDDEN()    ISNUM()        ISOBJID()   
+  ISPUNCT()       ISSPACE()       ISTAG()       ISUNICODE()    ISUTF8()
+  ISWORD()        ISXDIGIT()      ITER()        ITEXT()        KEEPFLAGS()  
+  KEEPTYPE()      LADD()          LAND()        LAST()         LASTCREATE() 
+  LATTR()         LAVG()          LCMDS()       LCON()         LCSTR()      
+  LDELETE()       LDIV()          LEMIT()       LEFT()         LEXITS()     
+  LFLAGS()        LINK()          LIST()        LISTCOMMANDS() LISTDIFF()   
+  LISTFUNCTIONS()
   
 { 'help function list3' for more }
   
 & FUNCTION LIST3
     
-  LISTFLAGS()    LISTINTER()   LISTMATCH()    LISTNEWSGROUPS() LISTPROTECTION()
-  LISTRLEVELS()  LISTTAGS()    LISTTOGGLES()  LISTTOTEMS()     LISTUNION()    
-  LIT()          LJC()         LJUST()        LLOC()           LMAX()         
-  LMIN()         LMUL()        LN()           LNOR()           LNUM()         
-  LNUM2()        LOC()         LOCALFUNC()    LOCALIZE()       LOCATE()       
-  LOCK()         LOCKCHECK()   LOCKDECODE()   LOCKENCODE()     LOG()          
-  LOR()          LRAND()       LREPLACE()     LROOMS()         LSET()         
-  LSUB()         LT()          LTE()          LTOGGLES()       LTOTEMS()      
-  LWHO()         LXNOR()       LXOR()         LZONE()          MAILQUICK()    
-  MAP()          MATCH()       MASK()         MAX()            MEDIT()
-  MEMBER()       MERGE()       MID()          MIN()            MIX()          
-  MOD()          MODULO()      MODIFYTIME()   MONEY()          MONEYNAME()     
-  MOON()         MSECS()       MUDNAME()      MUL()            MUNGE()        
-  MWORDS()       NAME()        NAMEQ()        NAND()           NCOMP()        
-  NEARBY()       NEQ()         NEXT()         NOR()            NOSTR()        
-  NOT()          NOTCHR()      NPEMIT()       NSITER()         NUM()          
-  NUMMATCH()     NULL()        NUMMEMBER()    NUMPOS()         NUMWILDMATCH() 
-  OBJ()          OBJEVAL()     OBJID()        OEMIT()          OPEN()         
-  OR()           ORCHR()       ORFLAG()       ORFLAGS()        ORTOTEM()      
-  ORTOTEMS()     OWNER()       PACK()         PACKMATH()       PARENMATCH()   
-  PARENT()       PARSE()       PARSESTR()     PEDIT()          PEMIT()        
-  PFIND()        PGREP()       PI()           PID()            PMATCH()       
-  PORT()         POS()         POSS()         POWER()          POWER10()      
-  PRINTF()       PRIVATIZE()   PROGRAMMER()   PTIMEFMT()       PUSHREGS()     
-  QUOTA()        R()           RACE()         RAND()           RANDPOS()      
-  RANDMATCH()    RANDEXTRACT() 
+  LISTFLAGS()    LISTINTER()    LISTMATCH()   LISTNEWSGROUPS() LISTPROTECTION()
+  LISTRLEVELS()  LISTTAGS()     LISTTOGGLES() LISTTOTEMS()     LISTUNION()    
+  LISTTZONES()   LIT()          LJC()         LJUST()          LLOC()         
+  LMAX()         LMIN()         LMUL()        LN()             LNOR()         
+  LNUM()         LNUM2()        LOC()         LOCALFUNC()      LOCALIZE()     
+  LOCATE()       LOCK()         LOCKCHECK()   LOCKDECODE()     LOCKENCODE()   
+  LOG()          LOR()          LRAND()       LREPLACE()       LROOMS()       
+  LSET()         LSUB()         LT()          LTE()            LTOGGLES()     
+  LTOTEMS()      LWHO()         LXNOR()       LXOR()           LZONE()        
+  MAILQUICK()    MAP()          MATCH()       MASK()           MAX()          
+  MEDIT()        MEMBER()       MERGE()       MID()            MIN()          
+  MIX()          MOD()          MODULO()      MODIFYTIME()     MONEY()        
+  MONEYNAME()    MOON()         MSECS()       MSECSTZ()        MUDNAME()      
+  MUL()          MUNGE()        MWORDS()      NAME()           NAMEQ()        
+  NAND()         NCOMP()        NEARBY()      NEQ()            NEXT()         
+  NOR()          NOSTR()        NOT()         NOTCHR()         NPEMIT()       
+  NSITER()       NUM()          NUMMATCH()    NULL()           NUMMEMBER()    
+  NUMPOS()       NUMWILDMATCH() OBJ()         OBJEVAL()        OBJID()        
+  OEMIT()        OPEN()         OR()          ORCHR()          ORFLAG()       
+  ORFLAGS()      ORTOTEM()      ORTOTEMS()    OWNER()          PACK()         
+  PACKMATH()     PARENMATCH()   PARENT()      PARSE()          PARSESTR()     
+  PEDIT()        PEMIT()        PFIND()       PGREP()          PI()           
+  PID()          PMATCH()       PORT()        POS()            POSS()         
+  POWER()        POWER10()      PRINTF()      PRIVATIZE()      PROGRAMMER()   
+  PTIMEFMT()     PUSHREGS()     QUOTA()       R()              RACE()         
+  RAND()         RANDPOS()      RANDMATCH()   RANDEXTRACT() 
     
 { 'help function list4' for more }
  
 & FUNCTION LIST4
   
-  REBOOTSECS()    REBOOTTIME()    REGEDIT()      REGEDITI()     REGEDITALL()
-  REGEDITALLI()   REGMATCH()      REGMATCHI()    REGLMATCH()    REGLMATCHI()
-  REGLMATCHALL()  REGLMATCHALLI() REGRAB()       REGRABI()      REGREP()      
-  REGREPI()       RESWITCH()      RESWITCHI()    RESWITCHALL()  RESWITCHALLI()
-  REMAINDER()     REMIT()         REMFLAGS()     REMOVE()       REMTYPE()     
-  REPEAT()        REPLACE()       REST()         REVERSE()      REVWORDS()    
-  RIGHT()         RINDEX()        RJC()          RJUST()        RLOC()        
-  RNUM()          ROMAN()         ROOM()         ROTL()         ROTR()        
-  ROUND()         RSET()          RULER()        RXLEVEL()      S()          
-  SAFEBUFF()      SANDBOX()       SCRAMBLE()     SEARCH()       SEARCHOBJID()
-  SEARCHNG()      SEARCHNGOBJID() SECS()         SECURE()       SECUREX()    
-  SEES()          SET()           SETDIFF()      SETINTER()     SETQ()       
-  SETQ_OLD()      SETQMATCH()     SETR()         SETR_OLD()     SETUNION()   
-  SHIFT()         SHL()           SHR()          SHUFFLE()      SIGN()       
-  SIN()           SINGLETIME()    SORT()         SORTBY()       SORTLIST()   
-  SOUNDEX()       SOUNDLIKE()     SOUNDSLIKE()   SPACE()        SPELLNUM()   
-  SPLICE()        SQL()           SQLESCAPE()    SQLOFF()       SQLON()      
-  SQLPING()       SQLITE_QUERY()  SQRT()         SQUISH()       STARTTIME()  
-  STARTSECS()     STATS()         STDERR()       STEP()         STR()        
-  STRCAT()        STRDISTANCE()   STREQ()        STREVAL()      STRFUNC()    
-  STRIP()         STRIPACCENTS()  STRIPANSI()    STRLEN()       STRMATCH()   
-  STRMATH()       SUB()           SUBEVAL()      SUBJ()         SUBNETMATCH()
-  SWITCH()        SWITCHALL()     T()            TAG()          TAGMATCH()
-  TAN()           TEL()           TEMPLATE()     TIME()         TIMEFMT()
-  TOBIN()         TODEC()         TOGGLE()       TOHEX()        TOOCT()
-  TOTCMDS()       TOTEMS()        TOTEMSET()     TOTMATCH()     TOTMEMBER()  
-  TOTPOS()        TOTWILDMATCH()  TR()           TRACE()        TRANSLATE()  
-  TRIM()
+  REBOOTSECS()   REBOOTTIME()    REGEDIT()       REGEDITI()     REGEDITALL()
+  REGEDITALLI()  REGMATCH()      REGMATCHI()     REGLMATCH()    REGLMATCHI()
+  REGLMATCHALL() REGLMATCHALLI() REGRAB()        REGRABI()      REGREP()      
+  REGREPI()      RESWITCH()      RESWITCHI()     RESWITCHALL()  RESWITCHALLI()
+  REMAINDER()    REMIT()         REMFLAGS()      REMOVE()       REMTYPE()     
+  REPEAT()       REPLACE()       REST()          REVERSE()      REVWORDS()    
+  RIGHT()        RINDEX()        RJC()           RJUST()        RLOC()        
+  RNUM()         ROMAN()         ROOM()          ROTL()         ROTR()        
+  ROUND()        RSET()          RULER()         RUNINTZ()      RXLEVEL()      
+  S()            SAFEBUFF()      SANDBOX()       SCRAMBLE()     SEARCH()     
+  SEARCHOBJID()  SEARCHNG()      SEARCHNGOBJID() SECS()         SECSTZ()     
+  SECURE()       SECUREX()       SEES()          SET()          SETDIFF()   
+  SETINTER()     SETQ()          SETQ_OLD()      SETQMATCH()    SETR()      
+  SETR_OLD()     SETUNION()      SHIFT()         SHL()          SHR()       
+  SHUFFLE()      SIGN()          SIN()           SINGLETIME()   SORT()      
+  SORTBY()       SORTLIST()      SOUNDEX()       SOUNDLIKE()    SOUNDSLIKE()
+  SPACE()        SPELLNUM()      SPLICE()        SQL()          SQLESCAPE() 
+  SQLOFF()       SQLON()         SQLPING()       SQLITE_QUERY() SQRT()      
+  SQUISH()       STARTTIME()     STARTSECS()     STATS()        STDERR()    
+  STEP()         STR()           STRCAT()        STRDISTANCE()  STREQ()     
+  STREVAL()      STRFUNC()       STRIP()         STRIPACCENTS() STRIPANSI() 
+  STRLEN()       STRMATCH()      STRMATH()       SUB()          SUBEVAL()    
+  SUBJ()         SUBNETMATCH()   SWITCH()        SWITCHALL()    T()          
+  TAG()          TAGMATCH()      TAN()           TEL()          TEMPLATE()   
+  TIME()         TIMEFMT()       TOBIN()         TODEC()        TOGGLE()     
+  TOHEX()        TOOCT()         TOTCMDS()       TOTEMS()       TOTEMSET()   
+  TOTMATCH()     TOTMEMBER()     TOTPOS()        TOTWILDMATCH() TR()         
+  TRACE()        TRANSLATE()     TRIM()
   
 { 'help function list5' for more }
 
@@ -11953,21 +12407,23 @@
                        EDITANSI() ELEMENTPOS() ENCODE64() ENCRYPT() ESCAPE() 
                        ESCAPEX() ESCLIST() EVAL() GARBLE() IFELSE() ISALNUM() 
                        ISALPHA() ISDBREF() ISDIGIT() ISNUM() ISOBJID() 
-                       ISPUNCT() ISSPACE() ISTAG() ISWORD() ISXDIGIT() LCSTR() 
-                       LEFT() LIT() LJC() LJUST() MEDIT() MERGE() MID() NOSTR()
-                       NOTCHR() NUMPOS() ORCHR() PARSESTR() PEDIT() POS() 
-                       PRINTF() RANDPOS() REPEAT() REPLACE() RIGHT() RJC() 
-                       RJUST() ROTL() ROTR() S() SCRAMBLE() SECURE() SECUREX()
-                       SHL() SHR() SHUFFLE() SPACE() SPLICE() SQUISH() STR() 
-                       STRDISTANCE() STREQ() STREVAL() STRIP() STRIPACCENTS() 
-                       STRLEN() STRMATCH() SUBEVAL() SUBNETMATCH() SWITCH() 
+                       ISPUNCT() ISSPACE() ISTAG() ISUNICODE() ISUTF8() 
+                       ISWORD() ISXDIGIT() LCSTR() LEFT() LIT() LJC() LJUST() 
+                       MEDIT() MERGE() MID() NOSTR() NOTCHR() NUMPOS() ORCHR()
+                       PARSESTR() PEDIT() POS() PRINTF() RANDPOS() REPEAT() 
+                       REPLACE() RIGHT() RJC() RJUST() ROTL() ROTR() S() 
+                       SCRAMBLE() SECURE() SECUREX() SHL() SHR() SHUFFLE() 
+                       SPACE() SPLICE() SQUISH() STR() STRDISTANCE() STREQ() 
+                       STREVAL() STRIP() STRIPACCENTS() STRLEN() STRMATCH() 
+                       STRIPUNICODE() SUBEVAL() SUBNETMATCH() SWITCH() 
                        SWITCHALL() T() TEMPLATE() TOTPOS() TR() TRANSLATE() 
                        TRIM() UCSTR() UNESCLIST() WORDPOS() WORDS() WRAP() 
                        WRAPCOLUMNS() XORCHR()
              See Also: help string functions
   
-  Time:                CONVSECS() CONVTIME() MSECS() PTIMEFMT() SECS() 
-                       SINGLETIME() TIME() TIMEFMT()
+  Time:                CONVSECS() CONVTIME() LISTTZONES() MSECS() MSECSTZ() 
+                       PTIMEFMT() SECS() SECSTZ() SINGLETIME() TIME() TIMEFMT()
+                       RUNINTZ()
              See Also: help time functions  
   
   { 'help function classes6' for more }
@@ -12020,14 +12476,18 @@
   
 & GENDER
   Topic: GENDER
- 
+   
   A player's (virtual) gender is specified in the Sex attribute.  This
   attribute controls how gender-specific pronoun substitutions are evaluated
-  for the player.  If the player's Sex attribute starts with an 'M' or an 'm'
-  then the player is assumed to be male,  'F', 'f', 'W', and 'w' indicate
-  female, and anything else indicates neuter.
+  for the player.  A player's SEX attribute starts with the following
+  letters will trigger the special handling:
   
-  See Also: SUBSTITUTIONS
+  'M' or an 'm' then the player is assumed to be male.
+  'F', 'f', 'W', and 'w' indicate female.
+  'P' or 'p' will indicated a plural sex.
+   anything else indicates neuter.
+  
+  See Also: @sex, SUBSTITUTIONS
   
 & GOALS
   Topic: GOALS
@@ -12312,6 +12772,9 @@
 & %t
 & %b
 & %-
+& %-m
+& %-p
+& %-h
 & %i
 & %d
 & %q
@@ -12352,6 +12815,8 @@
                  the positional stack location 0 through 999.  BANGS supported.
     %-m        = The last command executed that issued @hook.  
     %-p        = The last direct-player command executed that issued @hook.  
+    %-h<cache> = Show the specified cache value ( works like atrcache() )
+                 Example: %-h<mynewcache>
     %i0-%i99   = Equivalent to itext(0) through itext(99). [%il for outer]
     %i_0-%i_99 = Equivalent to inum(0) through inum(99) [%i_l for outer]
                  BANGS supported.  Note: '99' depends on recursion limit.
@@ -13282,9 +13747,10 @@
   characters, skips <len> characters, and then copies the remainder of the 
   string.
   
-  You may specify a <key> of 1 to tell mid() to take the string raw and
-  not do ansi-aware processing.  This will speed up the function.
-  The default is '0' which does ansi processing.
+  You may specify a <key> of 1 to tell mid() to do ansi processing and
+  This will slow down the function.
+  
+  The default is '0' which does NOT do ansi processing.
   
   Note: the config param 'ansi_default' handles if the ansi handling is 
         configured default or not.  In which case the 'key' is reversed.
@@ -13510,10 +13976,52 @@
   EXAMPLES:             help printf examples
                         help printf penn      (for penn align-like examples)
                         help printf borders   (a quick example on borders)
+                        help printf subs      (coding center/ljust/rjust)
   
   See Also: center(), just(), rjust(), rjc(), ljc(), wrap(), columns(), 
             wrapcolumns(), array(), template()
 
+& PRINTF SUBS
+  Function: printf(<format string>,<arg1> [,<arg2>, ..., <argN>])
+  
+  These are ways to duplicate the common format functions on other
+  codebases.  Printf is fully color/ansi aware.
+  
+  --- center
+    Example 1:
+      > think center(- test -,70)
+      > think printf($^70s,- test -)
+    Example 2:
+      > think center(- test -,70,-)
+      > think printf($^70:-:s,- test -)
+    Example 3: (do not cut off)
+      > think center(- test -,4,-)
+      > think printf($^4+:-:s,- test -)
+  
+  --- ljust
+    Example 1:
+      > think ljust(- test -,70)
+      > think printf($-70s,- test -)
+    Example 2:
+      > think ljust(- test -,70,-)
+      > think printf($-70:-:s,- test -)
+    Example 3: (do not cut off)
+      > think ljust(- test -,4,-)
+      > think printf($-4+:-:s,- test -)
+  
+  --- rjust
+    Example 1:
+      > think rjust(- test -,70)
+      > think printf($70s,- test -)
+    Example 2:
+      > think rjust(- test -,70,-)
+      > think printf($70:-:s,- test -)
+    Example 3: (do not cut off)
+      > think rjust(- test -,4,-)
+      > think printf($4+:-:s,- test -)
+  
+  See Also: printf(), printf examples
+    
 & PRINTF BORDERS
   Function: printf(<format string>,<arg1> [,<arg2>, ..., <argN>])
   
@@ -14081,7 +14589,7 @@
     > say obj(me)
     You say "him"
    
-  See Also: SUBSTITUTIONS, poss(), subj(), aposs()
+  See Also: @sex, GENDER, SUBSTITUTIONS, poss(), subj(), aposs()
   
 & POSS()
   Function: poss(<object>)
@@ -14096,7 +14604,7 @@
     > say poss(me)
     You say "his"
     
-  See Also: SUBSTITUTIONS, obj(), subj(), aposs()
+  See Also: @sex, GENDER, SUBSTITUTIONS, obj(), subj(), aposs()
   
 & ARGS()
   Function: args([[<filter(s)>, [<delim>]])
@@ -14223,7 +14731,7 @@
     > say aposs(me)
     You say "his"
    
-  See Also: SUBSTITUTIONS, obj(), subj(), poss()
+  See Also: @sex, GENDER, SUBSTITUTIONS, obj(), subj(), poss()
   
 & SUBJ()
   Function: subj(<object>)
@@ -14238,7 +14746,7 @@
     > say subj(me)
     You say "he"
    
-  See Also: SUBSTITUTIONS, obj(), poss(), aposs()
+  See Also: @sex, GENDER, SUBSTITUTIONS, obj(), poss(), aposs()
   
 & @sql
   Command: @sql <query>
@@ -14562,17 +15070,56 @@
   See Also: map(), iter(), merge(), elements(), list(), elementpos(), inf()
   
 & TIME()
-  Function: time()
+  Function: time([<timezone>])
  
   Gives you the current time.
   WARNING!  This is the time on the machine that the mud is running on, and
   not where you are.
- 
-  Example:
-    > say time()
-    You say "Thu Dec 19 09:48:06 1991"
   
-  See Also: convsecs(), convtime(), secs(), msecs()
+  You may specify an optional timezone that time() will handle or you may
+  set a TIMEZONE attribute for the timezone you wish to use.
+   
+  Example:
+    > say time()                       (assume localtime was GMT)
+    You say "Thu Dec 19 09:48:06 1991"
+    > say time(GMT+1)
+    You say "Thu Dec 19 10:49:11 1991"
+  
+  See Also: convsecs(), convtime(), secs(), msecs(), secstz(), msecstz(),
+            listtzones(), secstz(), msecstz()
+ 
+& LISTTZONES()
+  Function: listtzones([<timezone> [,<key>]])
+  
+  This function will list all the valid timezones that the server recognizes
+  with the use of the TIMEZONE attribute and specific functions that handle
+  timezones.
+  
+  As of this writing these functions are:
+    time()          secstz()          msecstz()        listtzones()
+  
+  The <timezone> may be a wildcarded option to display any matching timezone.
+
+  The <key> can be '0' or '1'.  A '1' specifies that you want the offset 
+  from GMT for the specified timezone.
+  
+  If you use <key> with a wildcard, it will return the offset of the 
+  FIRST MATCHING TIMEZONE ONLY.  It will ignore any other matches.
+  
+  
+  Examples:
+    > listtzones()  (note this returns about 600+ entities)
+      Navajo Atlantic/Cape_Verde Atlantic/Stanley Atlantic/Madeira ...
+      ... ... ...
+      ... ... ...
+      ... Asia/Yerevan Asia/Ujung_Pandang Asia
+    > listtzones(US/*e*)
+      US/Pacific-New US/Central US/Aleutian US/Indiana-Starke US/Eastern
+    > listtzones(US/Central,1)
+      -18000
+  
+  See Also: TIMEZONE, secstz(), msecstz(), time()
+
  
 & timezone list
   Zone   Zone Name                           Zone Location    UTC/GMT Offset
@@ -14905,9 +15452,10 @@
   Right will take a string and return the right-most position of characters
   from the string.  
   
-  You may specify a <key> of 1 to tell right() to take the string raw and
-  not do ansi-aware processing.  This will speed up the function.
-  The default is '0' which does ansi processing.
+  You may specify a <key> of 1 to tell right() to enable ansi processing 
+  This will slow down the function.
+  
+  The default is '0' which does NOT do ansi processing.
   
   Note: the config param 'ansi_default' handles if the ansi handling is 
         configured default or not.  In which case the 'key' is reversed.
@@ -14930,9 +15478,10 @@
   Left will take a string and return the left-most position of characters
   from the string.
   
-  You may specify a <key> of 1 to tell left() to take the string raw and
-  not do ansi-aware processing.  This will speed up the function.
-  The default is '0' which does ansi processing.
+  You may specify a <key> of 1 to tell left() to enable ansi processing
+  This will slow down the function.
+  
+  The default is '0' which does NOT do ansi processing.
   
   Note: the config param 'ansi_default' handles if the ansi handling is 
         configured default or not.  In which case the 'key' is reversed.
@@ -15470,9 +16019,10 @@
   right of the <first> character.  Note that the first character in a
   string is numbered zero, and not one.
   
-  You may specify a <key> of 1 to tell mid() to take the string raw and
-  not do ansi-aware processing.  This will speed up the function.
-  The default is '0' which does ansi processing.
+  You may specify a <key> of 1 to tell mid() to enable ansi translation
+  and do ansi-aware processing.  This will slow down the function.
+  
+  The default is '0' which does not do ansi processing.
   
   Note: the config param 'ansi_default' handles if the ansi handling is 
         configured default or not.  In which case the 'key' is reversed.
@@ -15496,6 +16046,8 @@
     You say "-1"
     > say ncomp(2,2)
     You say "0"
+    > say ncomp(1.1,1.2)
+    You say "-1"
    
   See Also: alphamin(), alphamax(), comp(), strdistance()
   
@@ -15743,6 +16295,7 @@
     2 - list only the protected names that are not marked as aliases.
     3 - list protect names that are marked as aliases and the @alias.
     4 - list only the @alias
+    5 - list player dbref# who has specified protected name (wizard only)
   
   If the player is invalid, it returns an error, otherwise it returns an
   empty string if nothing is found for that criteria.  If the key is outside
@@ -15882,7 +16435,8 @@
     > subeval(this [add(1,1)] %p)
     You say "this [add(1,1)] his" 
   
-  See Also: SUBSTITUTIONS, eval(), subeval(), ueval(), streval(), u(), v()
+  See Also: @sex, GENDER, SUBSTITUTIONS, eval(), subeval(), ueval(), streval(),
+            u(), v()
   
 & SAFEBUFF()
   Function: safebuff(<list> [[,<delim>, [<length>]])
@@ -15921,7 +16475,7 @@
   A value less than 1 or larger than the length of the string is
   ignored.
   
-  This function is ansi-aware.
+  This function is ansi-aware.  The <delim> can be multi-character.
   
   You may specify a null delimiter (default is a space).
   
@@ -15935,15 +16489,20 @@
             creplace()
 
 & POS()
-  Function: pos(<string1>,<string2>[,<type>])
+  Function: pos(<string1>, <string2> [,<type> [,<key> ]])
    
-  This function returns the position that string1 begins in string2,
+  This function returns the position that <string1> begins in <string2>,
   with the first position being 1.
-  If string1 is not in string2, then it returns #-1.
+  
+  If <string1> is not in <string2>, then it returns #-1.
   
   You may optionally specify a <type> of '1' to tell pos() to match ANY
   of the characters specified in <string1> and to return the first match. 
   
+  If you specify a <key> of 1, it will enable utf8/ansi aware mode.
+  
+  Note: the config parameter ansi_default if enabled reverses this.
+   
   Example: 
     > say pos(man,superman)
     You say "6"
@@ -15955,13 +16514,14 @@
   See Also: totpos(), numpos(), randpos(), elementpos()
   
 & TOTPOS()
-  Function: totpos(<match>,<string>[,<type>])
+  Function: totpos(<match>, <string> [,<type> [,<key>]])
   
-  This function returns all the positions of 'match' in the given 'string'.
+  This function returns all the positions of <match> in the given <string>.
+  
   This works just like pos() but will give the character placement of
   all the matches instead of the pos()'s first match.
   
-  If a match is not found in string, an empty value is returned (null).
+  If a <match> is not found in <string>, an empty value is returned (null).
   
   The following types are available:
     1 - Tells totpos() to match ANY of the characters specified in 
@@ -15969,10 +16529,14 @@
     2 - Tells totpos() to match ANY of the characters specified in
         <string> and return the characters matched, in order, that
         were found.
-  
+   
   Note:  Options 1 and 2 are good mixes to stage and prep replacement
          with the creplace() function.
-   
+  
+  If <key> is set to '1', it will assume utf8/ansi mode for the function.
+  
+  Note: the config parameter ansi_default if enabled reverses this.
+    
   Example:
     > say totpos(t,this is a test)
     You say "1 11 14"
@@ -15986,7 +16550,7 @@
   See Also: numpos(), pos(), randpos(), creplace(), elementpos()
   
 & NUMPOS()
-  Function: numpos(<match>,<string>[,<type>])
+  Function: numpos(<match>, <string> [,<type> [,<ansi-aware>]])
   
   This function returns the total number of matches of 'match' in the
   string 'string'.  This works like totpos() but returns the number
@@ -15996,6 +16560,11 @@
   You may optionally specify a <type> of '1' to tell numpos() to match ANY
   of the characters specified in <string> and to return the total.
   
+  If you specify <ansi-aware> it will be ansi-aware and handle utf8. 
+  
+  Note: the config param 'ansi_default' handles if the ansi handling is 
+        configured default or not.  In which case the 'type' is reversed.
+   
   Example:
     > say numpos(t,this is a test)
     You say "3"
@@ -16003,6 +16572,8 @@
     You say "6"
     > say totpos(t,foobles)
     You say "0"
+    > say numpos(ansi(hb,ts),ansi(hr,this is a test),1,1)
+    You say "6"
   
   See Also: totpos(), pos(), randpos()
   
@@ -16182,6 +16753,8 @@
   Note:  The second option can use output from totpos() to stage and prep
          the values you want to replace depending on the situation.
   
+  This function is UTF8 and ansi aware.
+    
   Valid types are: 
         o - overwrite : starting at position it'll continue to overwrite
             until the end of the <string2>. (this is the default behavior)
@@ -16189,6 +16762,7 @@
             overwrite up to the maximum length of the original string.
         i - insert : starting at position it'll insert all of string2
             into the string.
+        r - replace string at position with <string2>
   
   Examples:
     > say creplace(this is a test,4,whee)
@@ -16199,6 +16773,8 @@
     You say "thiwheewheewho" 
     > say creplace(this is a test,4,wheewheewhoowha!,i)
     You say "thiwheewheewhoowha!s is a test"
+    > say creplace(this is a test,4,moo!,r)
+    You say "thimoo!"
   
   Option 2 Example:
     > say creplace(this is a test,1 3 4,X)
@@ -16287,6 +16863,17 @@
   
   This in effect will turn any function in the game into a string
   oriented function.  Thus the name, 'strfunc'.
+  
+  This will optionally allow executing @functions and/or @lfunctions
+  based on the config parameter strfunc_softfuncs.
+    0 - only hardcoded functions
+    1 - hardcoded and @functions
+    2 - hardcoded, @functions, and @lfunctions.
+  
+  You may use the config() function to check the value of the
+  strfunc_softfuncs config parameter.
+  
+  @list options system will also show the state of this feature.
   
   Examples:
     > say add(1,2,3,4)
@@ -16798,6 +17385,8 @@
   You may have to escape mush-special characters (like (, ), {, }, etc)
   Any invalid registers specified will be skipped over and ignored.
   
+  Register list may contain labels.
+    
   Examples:
     > say regmatch(cookies=30,\(.+\)=\(\[0-9\]*\))
     You say "1"
@@ -16822,6 +17411,8 @@
   You may also use a-z as registers if currently enabled on your RhostMUSH.
   You may have to escape mush-special characters (like (, ), {, }, etc)
   Any invalid registers specified will be skipped over and ignored.
+  
+  Register list may contain labels.
   
   Examples:
     > say regmatchi(cookies=30,\(.+\)=\(\[0-9\]*\))
@@ -17148,6 +17739,45 @@
  
   See Also: poss(), subj(), obj()
   
+& ATRCACHE()
+  Function: atrcache(<cache slot or name> [,<switch>])
+  
+  This function returns the value of the cached data in the specified
+  cache slot by slot number or name.  If the interval has exceeded from
+  the last cache, this function, depending on permissions, will recache
+  the results before fetching it.
+  
+  Permissions on this function follow the same series of Immortal, 
+  visibility, and lock.
+  
+  If you do not have permission to view the specified cache, an error
+  will be displayed.
+  
+  The following <switches> are available:
+     fetch        -- (default) will fetch the value of the cash.
+ +*  grab         -- do a force recache then fetch value.
+ +*  recache      -- run a recache of the specified cache based on interval
+  *  interval     -- return the interval that recaches are done
+  *  visible      -- return if the cache is visible or not
+  *  lock         -- return the hardening cache lock
+  *  lastrun      -- return the last time the cache was executed
+  *  owner        -- return the current owner of the cache
+ +*  forcerecache -- force a recache of the specified cache
+  *  exec         -- show the execution stack the cache uses
+  
+  Any value with a '*' requires owner or Immortal to use the switch.
+  Any value with a '+' requires a valid owner on the cache.
+  
+  Examples:
+    > say atrcache(mynewtest)
+    You say "#12345"
+    > say atrcache(mynewtest, fetch)
+    You say "#12345"
+    > say atrcache(notacache)
+    You say "#-1 INVALID CACHE"
+  
+  See Also: @atrcache, %-h
+
 & ATTRCNT()
   Function: attrcnt(<object> [,<key>])
   
@@ -17224,12 +17854,14 @@
      ufunction  - returns '1' if string is valid @function/@lfunction.
      flag       - returns '1' if string is a valid flag.
      toggle     - returns '1' if string is a valid toggle.
+     totem      - returns '1' if string is a valid totem.
      qreg       - returns '1' if string is valid qreg label.
      colorname  - returns '1' if string is a valid +name for ansi.
      ansicodes  - always returns '1'.  Meant for Penn compatibility.
      timezone   - returns '1' if string is a valid timezone.
      locktype   - returns '1' if string is a valid lock switch/type.
      lockkey    - returns '1' if string is a valid string for locking.
+     tag        - returns '1' if string is a valid tag (must start with a #)
   
   If a valid option is not specified, this function returns #-1.
   
@@ -17715,7 +18347,7 @@
   
   Example:
     > look
-    A Room(#1234R)
+    A Room(#12345R)
     You see a room.
     Obvious exits:
     An Exit <AE>
@@ -18135,7 +18767,8 @@
     > say reboottime()
     You say "Sat Dec  7 00:09:13 1991
     
-  See Also: convtime(), starttime(), rebootsecs(), startsecs(), msecs()
+  See Also: convtime(), starttime(), rebootsecs(), startsecs(), msecs(),
+            secstz(), msecstz()
   
 & STARTTIME()
   Function: starttime()
@@ -18147,7 +18780,8 @@
     > say starttime()
     You say "Sat Dec  7 00:09:13 1991
   
-  See Also: convtime(), reboottime(), startsecs(), rebootsecs(), msecs()
+  See Also: convtime(), reboottime(), startsecs(), rebootsecs(), msecs(),
+            secstz(), msecstz()
   
 & REBOOTSECS()
   Function: rebootsecs()
@@ -18158,7 +18792,8 @@
     > say startsecs()
     You say "2324234"
    
-  See Also: startime(), secs(), startsecs(), reboottime(), msecs()
+  See Also: startime(), secs(), startsecs(), reboottime(), msecs(),
+            secstz(), msecstz()
   
 & STARTSECS()
   Function: startsecs()
@@ -18169,7 +18804,8 @@
     > say startsecs()
     You say "2324234"
    
-  See Also: startime(), secs(), rebootsecs(), reboottime(), msecs()
+  See Also: startime(), secs(), rebootsecs(), reboottime(), msecs(),
+            secstz(), msecstz()
   
 & WRITABLE()
   Function: writable(<player>, <target>/<attrib>)
@@ -18204,7 +18840,7 @@
   to the next line, overriding the logic of the word wrapping. 
   
   <jst> may be any of the following.  You can just use the first character.
-     left      - all text is wrapped to the left margin
+     left      - all text is wrapped to the left margin (default)
      right     - all text is wrapped to the right margin
      center    - all text is wrapped to the center
      justified - all text is 'stretched' from the left to right margin.
@@ -18445,7 +19081,7 @@
   See Also: wrapcolumns(), wrap(), array(), printf(), template()
   
 & PTIMEFMT()
-  ptimefmt(<format>[, <secs>])
+  ptimefmt(<format>[, <secs> [,<timezone>]])
    
   This function takes a format and a time in seconds (Or the current time)
   and returns the format with escape sequences in it expanded to the
@@ -18453,6 +19089,13 @@
   on.
    
   A list of all codes is in HELP PTIMEFMT2
+  
+  You may specify a timezone to ptimefmt to change the timezone it works
+  under.  This follows timezones under 'help timezone'.  
+  
+  Note: Due to the nature of ptimefmt() it will require an override 
+        timezone to be passed to it and will not honor the TIMEZONE 
+        attribute at this time.
    
   Example:
   > think ptimefmt($A\, the $dth day of $B.)
@@ -18477,7 +19120,7 @@
   $m - Month of the year         $Z - Time zone
   $M - Minutes after the hour    $$ - $ character.
   
-  See Also: timefmt()
+  See Also: timefmt(), runintz(), TIMEZONE
   
 & TIMEFMT()
   Function: timefmt(<format string>, <secs> [,<output timezone>])
@@ -18503,7 +19146,7 @@
         of preferred timezones (example, &TZ me=GMT CST EST) that
         you wish to use for matching.  This honors parents.
   
-  See Also: time(), singletime(), ptimefmt(), timezone list
+  See Also: time(), singletime(), ptimefmt(), runintz(), timezone list
   
 & TIMEFMT ESCAPES
   To cause the timefmt function to output a '$' character it must be
@@ -18554,7 +19197,7 @@
       SAMPLE OUTPUT:  3d12:03
       NOTE: This example uses advanced features, see: help timefmt advanced
   
-  See Also: timefmt advanced
+  See Also: timefmt advanced, secs(), secstz()
   
 & TIMEFMT TIME
   The following format specifiers are available for processing the <secs>
@@ -18570,7 +19213,7 @@
   'P'    AM or PM                 AM/PM
   'p'    am or pm                 am/pm
   
-  See Also: timefmt examples, secs(), msecs()
+  See Also: timefmt examples, secs(), msecs(), secstz(), msecstz()
   
 & TIMEFMT DATE
   The following format specifiers are available for processing the <secs>
@@ -18590,7 +19233,7 @@
   'Y'    Year                     0..????
   'y'    Year (two digit)         0..99
   
-  See Also: timefmt examples, secs(), msecs()
+  See Also: timefmt examples, secs(), msecs(), secstz(), msecstz()
   
 & TIMEFMT ELAPSED
   The following format specifiers are available for processing the <secs>
@@ -18786,16 +19429,25 @@
                       if the total character count is less than two. IE: '12'
   
 & MSECS()
+& MSECSTZ()
 & SECS()
+& SECSTZ()
   Function: secs()
             msecs()
+            secstz([<timezone>])
+            msecstz([<timezone>])
  
   Returns the number of elapsed seconds since midnight, January 1, 1970.
   This is an easy way to time things.
   
   The msecs() function works like secs() but gives the fractional millisecond
   of the current time.
-   
+  
+  The secstz() and msecstz() are timezone aware and will optionally allow you
+  to specify the timezone as an override, or if you have the TIMEZONE
+  attribute, it will use that.  It uses local system time if neither are
+  specified meaning it falls back to the behavior of secs()/msecs().
+  
   Example:
      > say secs()
      You say "692636020"
@@ -18804,8 +19456,22 @@
      You say "692636043"
      > say msecs()
      You say "692636049.7"
+     > &TIMEZONE me=localtime   (note: localtime in this case was CDT/CST)
+     Set.
+     > say secs() [secstz()]
+     You say "692636143 692636143"
+     > &TIMEZONE me=localtime
+     Set.
+     > say secs() [secstz()]
+     You say "692636143 692636143"
+     > &TIMEZONE me=GMT
+     > say secs() [secstz()]   (note: secs() is localtime, not GMT)
+     You say "692667350 / 692685350"
+     > say secs() [secstz(localtime)]   (note: secs() is localtime, not GMT)
+     You say "692667350 / 692685350"
   
-  See Also: convsecs(), convtime(), time(), timefmt()
+  See Also: secstz(), msecstz(), secs(), msecs(), convsecs(), convtime(), 
+            time(), timefmt(), listtzones(), TIMEZONE
   
 & MWORDS()
 & WORDS()
@@ -18926,7 +19592,7 @@
     > say moon(999999999)
     You say "The Moon is Waning Gibbous (72% of Full)"
   
-  See Also: time(), secs(), timefmt()
+  See Also: time(), secs(), secstz(), timefmt(, secstz())
   
 & LCON()
   Function: lcon(<obj>[/swi] [[,<swi> [,<sep> [,<name> [,<objid> [,<count>]])
@@ -19006,11 +19672,11 @@
     t1(#366)
     radio(#223p)
     The Wizard's Pointy Hat(#188S0)
-    A red rose(#1234C)
+    A red rose(#12345C)
     Spybot(#2672p)
     You have 1086 Gold Coins.
     > say lcon(me)
-    You say "#366 #223 #188 #1234 #2672"
+    You say "#366 #223 #188 #12345 #2672"
     > say xcon(me,2,2)
     You say "#223 #188"
     > say lcon(me/puppet)
@@ -19235,13 +19901,21 @@
   See Also: secure(), securex(), escapex(), esclist(), unesclist()
   
 & ESCAPEX()
-  Function: escapex(<string> [,<omission>])
+  Function: escapex(<string> [,<omission> [,<omission list>])
   
   This functions exactly like escape(), except you may specify what characters
   you wish to omit from being escaped through <omition>.  The optional special
   characters can be used when looking to escape out fields:
      f - omit the first escape (backslash) from the string.
      a - omit all forms of ansi substitutions from the string.
+     8 - omit all UTF8 encoding %<u####> form
+     s - omit all forms of whitespace (%b, %t, %r)
+     d - omit all dbref forms (%#, %!, %@, %l)
+     p - omit all player pronouns (%n, %p, %a, %s)
+     x - omit all %-subs specified in <omission list>.  Example: <, n, s, etc
+  
+  Note: <omission> can be combined.  So you  may specify both 'as' or 'asp' 
+        and so forth. 
   
   Example:
     > say escapex(Hey, Sneak a peak at Wiz's desc... [get($1/desc)],\[\])
@@ -19542,8 +20216,8 @@
   If you want to return the portion of the string after the first space,
   use the first() function instead.  This function is case sensitive.
   
-  You may specify a <key> of 1 to disable ansi handling which will speed
-  this function up.  The default is '0' which allows ansi handling.
+  You may specify a <key> of 1 to enable ansi handling which will slow
+  this function down.  The default is '0' which disallows ansi handling.
   
   Note: the config param 'ansi_default' handles if the ansi handling is 
         configured default or not.  In which case the 'key' is reversed.
@@ -19603,8 +20277,8 @@
   If you want to return the portion of the string after the first space,
   use the rest() function instead.  This function is case sensitive.
   
-  You may specify a <key> of 1 to disable ansi handling which will speed
-  this function up.  The default is '0' which allows ansi handling.
+  You may specify a <key> of 1 to enable ansi handling which will slow
+  this function down.  The default is '0' which disallows ansi handling.
   
   Note: the config param 'ansi_default' handles if the ansi handling is 
         configured default or not.  In which case the 'key' is reversed.
@@ -20353,11 +21027,13 @@
   See Also: andflag(), andflags(), orflag(), hasflag(), flags(), lflags()
   
 & ANDCHR()
-  Function: andchr(<string>,<listofcharacters>)
+  Function: andchr(<string>, <listofcharacters> [,<key>])
   
   This function returns true(1) if the specified <string> contains
   at least one of every character in <listofcharacters>.  If one
   of the characters does not exist, it'll return false(0).
+  
+  You may specify <key> to make this function utf8/ansi aware.
   
   Examples:
     > say andchr(wizards,zdi)
@@ -20368,11 +21044,13 @@
   See Also: orchr(), xorchr(), notchr()
   
 & ORCHR()
-  Function: orchr(<string>,<listofcharacters>)
+  Function: orchr(<string>, <listofcharacters> [,<key>])
   
   This function returns true(1) if any one of the characters in
   <listofcharacters> exists in <string>.  It will return false(0)
   if none of the characters exist in <string>.
+  
+  You may specify <key> to make this function utf8/ansi aware.
   
   Examples:
     > say orchr(wizards,ymqi)
@@ -20383,11 +21061,13 @@
   See Also: andchr(), xorchr(), notchr()
   
 & XORCHR()
-  Function: xorchr(<string>,<listofcharacters>)
+  Function: xorchr(<string>, <listofcharacters> [,<key>])
   
   This function returns true(1) if only ONE of the characters in
   <listofcharacters> exists in <string>.  It will return false(0)
   under every other situation.
+  
+  You may specify <key> to make this function utf8/ansi aware.
   
   Examples:
     > say xorchr(wizards,qim)
@@ -20400,11 +21080,13 @@
   See Also: andchr(), orchr(), notchr()
   
 & NOTCHR()
-  Function: notchr(<string>,<listofcharacters>)
+  Function: notchr(<string>, <listofcharacters> [,<key>])
   
   This function returns true(1) if NONE of the characters in
   <listofcharacters> exists in <string>.  It will return false(0)
   if any of the characters exist in <string>.
+  
+  You may specify <key> to make this function utf8/ansi aware.
   
   Examples:
     > say notchr(wizards,qim)
@@ -20635,9 +21317,12 @@
   useful when you need to parse arguments under a different permission 
   level than the one you currently at.
   
-  Permission override, if specified to '1' by a wizard enactor, will
-  override the NO_CODE flag on the target and still execute any code
-  of that person.  This is ignored for any enactor not a wizard.
+  The following permission overrides are allowed as a bitmask.
+    1 - Wizard only, will override the NO_CODE flag on the target and still 
+        execute any code of that person.  This is ignored for any enactor 
+        not a wizard.
+    2 - Guildmaster and higher only.  Will enforce player, cause, and caller
+        as the <thing> as a 'true' sudo to that target for the <function>.
    
   Examples:
     > (Let's assume #4523 is an object owned by a normal player)
@@ -22214,7 +22899,7 @@
   
   Examples:
     > say lset(me,no_inherit)
-    @lset: [DefaultLock] set NO_INHERIT on Ashen-Shugar(#1234)
+    @lset: [DefaultLock] set NO_INHERIT on Ashen-Shugar(#12345)
     You say ""
     > say lset(me)
     @lset: [DefaultLock] on Player(#123): no_inherit
@@ -22309,6 +22994,31 @@
   See Also: toggle(), totemset(), lset(), set(), writable(), &, @set, 
             SIDEEFFECTS, ATTRIBUTE TREES
   
+& RUNINTZ()
+  Function: runintz(<string>, <timezone>)
+  
+  This function will evaluate and run the <string> in the specified
+  <timezone>.  If the <timezone> is invalid, the function will error out.
+  
+  If you pass a null <string> the function will immediately return out.
+  
+  This is useful to sandbox a string and evaluate it in a forced timezone.
+  All time related functions will honor the timezone.
+  
+  Examples:
+    > say ptimefmt($a $b $d $I:$M:$S $p $Z,1703322860)
+      You say "Sat Dec 23 03:14:20 AM CST"
+    > say runintz(ptimefmt($a $b $d $I:$M:$S $p $Z,1703322860),US/Hawaii)
+      You say "Fri Dec 22 11:14:20 PM HST"
+    > say runintz(ptimefmt($a $b $d $I:$M:$S $p $Z,1703322860),GMT)
+      You say "Sat Dec 23 09:14:20 AM GMT"
+    > say runintz(ptimefmt($a $b $d $I:$M:$S $p $Z,1703322860),CST6CDT)
+      You say "Sat Dec 23 03:14:20 AM CST"
+    > say runintz(ptimefmt($a $b $d $I:$M:$S $p $Z,1703322860),localtime)
+      You say "Sat Dec 23 03:14:20 AM CST"
+  
+  See Also: ptimefmt(), secstz(), time(), TIMEZONE
+
 & RULER()
   Function: ruler(<object>/<attribute>, <ruler value>)
   
@@ -22923,7 +23633,7 @@
     You say "Wed Jun 24 10:22:54 1992"
   This function may also be called as secs2time().
   
-  See Also: convtime(), secs(), time(), timefmt()
+  See Also: convtime(), secs(), secstz(), time(), timefmt()
   
 & CONVTIME()
   Function: convtime(<time string>)
@@ -22949,7 +23659,7 @@
   
   Enhanced date checking is handled with the 'enhanced_convtime' param.
   
-  See Also: convsecs(), secs(), time(), timefmt()
+  See Also: convsecs(), secs(), secstz(), time(), timefmt()
   
 & SORT()
   Function: sort(<list>[, <sort type>[, <delim> [, <sep>]]])
@@ -22958,9 +23668,9 @@
     order.  Lexicographic order is used for words, and numeric order is used
     for numbers and dbrefs.
   * <sort type> may be used to specify the type of sort to perform (use d for
-    dbref, n for integer numeric, f for floating numeric, and a for
-    alphanumeric).  If omitted or left blank, the sort() function will
-    automatically determine the type of sort to perform.
+    dbref, n for integer numeric, f for floating numeric, a for alphanumeric
+    and i for case-insensitive alphanumeric). If omitted or left blank, the
+    sort() function will automatically determine the type of sort to perform.
   * If <delim> is specified, it (rather than a space) is used to separate items
     in the list.  You may specify an alternate delimiter without specifying
     a sort type by passing a null <sort type> parameter.
@@ -23001,6 +23711,8 @@
   The following <order> types are allowed:  
     +a  -- (default) sort alphanumerically by maximum value 
     -a  -- (default) sort alphanumerically by minimum value
+    +i  -- sort alphanumerically by maximum value (Case-insensitive)
+    -i  -- sort alphanumerically by minimum value (Case-insensitive)
     +n  -- sort integers numerically by maximum value
     -n  -- sort integers numerically by minimum value
     +f  -- sort floating numerically by maximum value
@@ -23199,9 +23911,10 @@
   See Also: setdiff(), setinter(), sort(), listunion()
   
 & MERGE()
-  Function: merge(<string1>,<string2>,<character>)
+  Function: merge(<string1>, <string2>, <character> [,<key>])
   
   This function merges <string1> and <string2>, depending on <character>.
+  
   If a character in <string1> is the same as <character>, it is replaced
   by the character in the corresponding position in <string2>.  The two
   strings must be of the same length.
@@ -23209,6 +23922,10 @@
   Spaces need to be treated specially. A null character is considered to
   equal a space, for <character>.
   
+  If you specify <key> it will optionally be utf8/ansi aware.
+  
+  Note: if ansi_default is enabled, <key> is reversed.
+    
   Examples:
     > say merge(AB--EF,abcdef,-)
     You say, "ABcdEF"
@@ -23265,13 +23982,13 @@
   
   Example:
     > say %n %#
-    You say "Bob #1234"
+    You say "Bob #12345"
     > say pmatch(bob)
-    You say "#1234"
-    > say pmatch(#1234)
-    You say "#1234"
+    You say "#12345"
+    > say pmatch(#12345)
+    You say "#12345"
     > say pmatch(*bob)
-    You say "#1234"
+    You say "#12345"
   
   See Also: num(), pfind()
   
@@ -23285,7 +24002,7 @@
   
   Example:
     > say pfind(Bob)
-    You say "#1234"
+    You say "#12345"
   
   See Also: num(), pmatch()
   
@@ -23642,7 +24359,7 @@
             cosh(), sinh(), tanh()
   
 & PID()
-  Function: pid([<display> [,<separator> [,<type> [,<target>]]])
+  Function: pid([<display> [,<separator> [,<type> [,<target>] [,<key>]]])
   
   This function returns the queue process table based on various arguments.
   
@@ -23667,9 +24384,13 @@
     s    - show all semaphore jobs
     p    - show all player queue jobs (jobs currently being ran)
     o    - show all object queue jobs (jobs currently being ran)
+    c    - show count of all processes
   
   <target> is an optional target to narrow down queue values.  The <target> 
   may be a player or a process ID (PID).  Default is everyone.
+  
+  <key> if set to '1' will cause <target>, if a player type, to list all
+  processes owned by that player.
   
   {help pid2 for examples}
 
@@ -23686,7 +24407,7 @@
     (PID: 196  )   [126]Umbra Code (UC)(#2642VIS[s]):@trigger me/LOOP_CLEANUP
     ----- Semaphore Queue -----
     (PID: 71   )   [#901]Tester(#901Pc>Dp^UF<[so]):@pemit me=zoot
-    (PID: 84   )   [#1234]Bob(#734P-ci>WFO<[UsO]):think foo
+    (PID: 84   )   [#12345]Bob(#734P-ci>WFO<[UsO]):think foo
     Totals: Player...0/0        Object...0/0        Wait...4/4  Semaphore...2/2
     > say pid()
       You say "227 224 195 196 71 84"
@@ -23780,7 +24501,7 @@
     > say singletime(123456)
     You say "1d"
  
-  Related Topics: secs(), time(), timefmt()
+  Related Topics: secs(), secstz(), time(), timefmt()
 
 & CTU()
   Function: ctu(<number>, <units-from>, <units-to>)
@@ -23991,18 +24712,31 @@
   See Also: ACCENTS, chr(), asc(), tr(), stripaccents(), substitutions,
             UNICODE SUPPORT
 
+& STRIPUNICODE()
 & STRIPACCENTS()
   Function: stripaccents(<string>)
+            stripunicode(<string>)
   
-  Returns the string with accented characters converted to non-accented.
-  This function assumes the ISO 8859-1 character set.
+  Returns the string with accented (see also: ACCENTS) characters converted to
+  non-accented.  This usage assumes the ISO 8859-1 character set.
+  
+  Additionally, Unicode codepoints (see also: UNICODE SUPPORT) are converted to
+  their closest non-accented character where available.
   
   Example:
     > say stripaccents(Aul(e-with-diaeresis))
     You say "Aule"
+  
+  If the accent or Unicode character has no ASCII version, it will not be shown.
+  
+  Example:
+    > say stripaccents(Aul(latin-small-letter-thorn))
+    You say "Aul"
+  
+  This function is also called stripunicode().
    
-  See Also: chr(), asc(), strip(), stripansi(), tr(), accent(), ACCENTS.
-
+  See Also: chr(), asc(), strip(), stripansi(), stripunicode(), tr(), accent(),
+            ACCENTS, UNICODE SUPPORT.
   
 & ACOS()
   Function: acos(<number> [,<units>])
@@ -24149,9 +24883,10 @@
   This function translates every character in <string> that exists in
   <find> to the character at an identical position in <replace>. 
   
-  If you specify the <type> of '1', then tr by default will not be made 
-  ansi-aware and also process strings faster without the ansi overhead.
-  The default value is '0' which allows tr() to be fully ansi-aware.
+  If you specify the <type> of '1', then tr will be made ansi-aware and 
+  also process strings slower withthe ansi overhead.
+  
+  The default value is '0' which allows tr() to be in raw mode.
    
   Ranges of characters separated by -'s are accepted. <find> and <replace> 
   must be the same length after expansion of ranges. If a character exists 
@@ -24679,8 +25414,8 @@
   
 & RJ()
 & RJUST()
-  Function: rjust(<string>, <length>[, <fill>])
-            rj(<string>, <length>[, <fill>])
+  Function: rjust(<string>, <length>[, <fill> [,<cut>]])
+            rj(<string>, <length>[, <fill> [,<cut>]])
  
   This function pads a string with leading <fill> characters, or with spaces
   if no fill character is given) ("right-justifies") so it is <length> long.
@@ -24688,7 +25423,11 @@
   truncated. <fill> may be a string of over one character.
   
   If you wish to use ansified filler, use printf() instead.
-   
+  
+  You may specify an optional 'cut' argument to rjust() to mimic rjc() 
+  
+  This function is UTF8 aware.
+  
   Examples:
     > say -[rjust(foo,6)]-
     You say "-   foo-"
@@ -24714,6 +25453,8 @@
   You may specify an optional fill character.
   
   If you wish to use ansified filler, use printf() instead.
+  
+  This function is UTF8 aware.
    
   Examples:
     > say -[rjc(foo,6)]-
@@ -24759,6 +25500,8 @@
   You may specify an optional fill character.
   
   If you wish to use ansified filler, use printf() instead.
+  
+  This function is UTF8 aware.
    
   Examples:
     > say -[ljc(foo,6)]-
@@ -24770,8 +25513,8 @@
  
 & LJ()
 & LJUST()
-  Functions: ljust(<string>, <length>[, <fill>])
-  Functions: lj(<string>, <length>[, <fill>])
+  Functions: ljust(<string>, <length>[, <fill> [,<cut>]])
+  Functions: lj(<string>, <length>[, <fill> [,<cut>]]])
  
   This function pads a string with trailing <fill> characters, or with spaces
   if no fill character is given) ("left-justifies") so it is <length> long.
@@ -24779,7 +25522,11 @@
   truncated.  <fill> may be a string of more than one character.
   
   If you wish to use ansified filler, use printf() instead.
-   
+  
+  You may specify an optional 'cut' argument to ljust() to mimic ljc() 
+  
+  This function is UTF8 aware.
+  
   Examples:
     > say -[ljust(foo,6)]-
     You say "-foo   -"
@@ -25024,6 +25771,9 @@
   
   If the label is 0-9 or a-z when using '+' or '!' it assumes you want the
   register set and not a label assigned.
+  
+  If the target has SETQLABEL enabled or the config parameter is set,
+  then any register that has a label must have the label to set new values.
    
   Example:
     > &TEST me=Test on [mudname()] at [time()].
@@ -25033,7 +25783,7 @@
     You say "Test: Test on TestMUSH at Tue Feb 23 17:00:51 1993"
   
   See Also: setr(), setr_old(), setq_old(), r(), nameq(), inc(), dec(), 
-            setqmatch(), SETQ_TEMPLATE
+            setqmatch(), SETQ_TEMPLATE, REGISTERS
   
 & SETQ_OLD()
   Function: setq_old(<register>,<string>[,<label>])
@@ -25062,8 +25812,11 @@
   
   If the label is 0-9 or a-z when using '+' or '!' it assumes you want the
   register set and not a label assigned.
+  
+  If the target has SETQLABEL enabled or the config parameter is set,
+  then any register that has a label must have the label to set new values.
 
-  See Also: setr_old(), setq(), setr(), nameq(), SETQ_TEMPLATE
+  See Also: setr_old(), setq(), setr(), nameq(), SETQ_TEMPLATE, REGISTERS
   
 & SETQMATCH()
   Function: setqmatch(<string>, <pattern>[,delim])
@@ -25079,6 +25832,9 @@
   If it fails, it returns 0.  If optional delimiter of 'n' is specified,
   then it returns nothing for failures or successes.  Default is 'y' for
   returning values.
+  
+  If the target has SETQLABEL enabled or the config parameter is set,
+  then any register that has a label must have the label to set new values.
  
   Example:
     > say setqmatch(This is a test, *test) -- [r(0)]
@@ -25090,7 +25846,7 @@
     > say setqmatch(kow, wok, n)
     You say ""
   
-  See Also: listmatch(), match(), totmatch(), wildmatch(), setq()
+  See Also: listmatch(), match(), totmatch(), wildmatch(), setq(), REGISTERS
   
 & SETQ_TEMPLATES
   You can specify 'templates' for setq registers to automatically have 
@@ -25111,7 +25867,10 @@
   You may redefine these labels as you would normally with nameq(), 
   setq(), or setr().
   
-  See Also: nameq(), setq(), setr()
+  If the target has SETQLABEL enabled or the config parameter is set,
+  then any register that has a label must have the label to set new values.
+  
+  See Also: nameq(), setq(), setr(), REGISTERS
   
 & SETR()
   Function: setr(<register>,<string>[,<label>])
@@ -25143,6 +25902,9 @@
   
   If the label is 0-9 or a-z when using '+' or '!' it assumes you want the
   register set and not a label assigned.
+  
+  If the target has SETQLABEL enabled or the config parameter is set,
+  then any register that has a label must have the label to set new values.
    
   Example: 
     > &TEST me=Test on [mudname()] at [time()].
@@ -25150,7 +25912,7 @@
     You say "'Test on TestMUSH at Tue Feb 23 17:00:51 1993.' has length 45."
   
   See Also: setq(), setq_old(), setr_old(), r(), nameq(), inc(), dec(),
-            setqmatch(), SETQ_TEMPLATE
+            setqmatch(), SETQ_TEMPLATE, REGISTERS
   
 & SETR_OLD()
   Function: setr_old(<register>,<string>[,<label>])
@@ -25180,7 +25942,10 @@
   If the label is 0-9 or a-z when using '+' or '!' it assumes you want the
   register set and not a label assigned.
   
-  See Also: setq_old(), setq(), setr(), nameq(), SETQ_TEMPLATE
+  If the target has SETQLABEL enabled or the config parameter is set,
+  then any register that has a label must have the label to set new values.
+  
+  See Also: setq_old(), setq(), setr(), nameq(), SETQ_TEMPLATE, REGISTERS
   
 & TRIM()
   Function: trim(<string> [,<trim style> [,<trim character(s)>]])
@@ -25217,6 +25982,8 @@
   unmodified.  The <fill> may contain more than one character.
   
   If you wish to use ansified filler, use printf() instead.
+  
+  This function is UTF8 aware.
    
   Example:
     > say center(a,5,-)
@@ -25373,7 +26140,7 @@
     You say "0"
  
   See Also: isdbref(), isalnum(), ispunct(), isxdigit(), isdigit(), isspace(),
-            istag(), isword(), isobjid()
+            istag(), isword(), isunicode(), isutf8(), isobjid()
   
 & ISALNUM()
   Function: isalnum(<string>)
@@ -25389,7 +26156,7 @@
     You say "1"
   
   See Also: isdbref(), isalpha(), ispunct(), isxdigit(), isdigit(), isspace(),
-            istag(), isword(), isobjid()
+            istag(), isword(), isunicode(), isutf8(), isobjid()
   
 & ISCLUSTER()
   Function: iscluster(<target>)
@@ -25419,7 +26186,7 @@
     You say "1"
    
   See Also: isdbref(), isalpha(), isalnum(), isxdigit(), isdigit(), isspace(),
-            istag(), isword(), isobjid()
+            istag(), isword(), isunicode(), isutf8(), isobjid()
   
 & ISHIDDEN()
   Function: ishidden(<player>)
@@ -25484,7 +26251,7 @@
     You say "0"
   
   See Also: isdbref(), isalpha(), isalnum(), isxdigit(), ispunct(), isspace(),
-            istag(), isword(), isdigit(), isobjid()
+            istag(), isword(), isunicode(), isutf8(), isdigit(), isobjid()
 
 & ISDIGIT()
   Function: isdigit(<string>)
@@ -25500,7 +26267,7 @@
     You say "1"
   
   See Also: isdbref(), isalpha(), isalnum(), isxdigit(), ispunct(), isspace(),
-            istag(), isword(), isint(), isobjid()
+            istag(), isword(), isunicode(), isutf8(), isint(), isobjid()
   
 & ISXDIGIT()
   Function: isxdigit(<string>)
@@ -25516,7 +26283,7 @@
     You say "0"
  
   See Also: isdbref(), isalpha(), isalnum(), isdigit(), ispunct(), isspace(),
-            istag(), isword(), isobjid()
+            istag(), isword(), isunicode(), isutf8(), isobjid()
   
 & ISSPACE()
   Function: isspace(<string>)
@@ -25534,7 +26301,7 @@
     You say "0"
  
   See Also: isdbref(), isalpha(), isalnum(), isdigit(), isxdigit(), ispunct(),
-            istag(), isword(), isobjid()
+            istag(), isword(), isunicode(), isutf8(), isobjid()
   
 & ISTAG()
   Function: istag(<string>)
@@ -25552,7 +26319,7 @@
      You say "0"
   
   See Also: @ltag, isspace(), isalpha(), isalnum(), isdigit(), isxdigit(), 
-            ispunct(), isdbref(), isword(), isobjid()
+            ispunct(), isdbref(), isword(), isunicode(), isutf8(), isobjid()
 
 & ISDBREF()
   Function: isdbref(<string>)
@@ -25572,7 +26339,7 @@
      You say "0"
   
   See Also: isspace(), isalpha(), isalnum(), isdigit(), isxdigit(), ispunct(),
-            istag(), isword(), isobjid()
+            istag(), isword(), isunicode(), isutf8(), isobjid()
 
 & ISOBJID()
   Function: isobjid(<string>)
@@ -25597,13 +26364,50 @@
      You say "0"
   
   See Also: isspace(), isalpha(), isalnum(), isdigit(), isxdigit(), ispunct(),
-            istag(), isword(), isdbref()
+            istag(), isword(), isunicode(), isutf8(), isdbref()
+  
+& ISUNICODE()
+  Function: isunicode(<string>)
+  
+  This function will return '1' if the argument is a valid unicode word.  A 
+  valid unicode word is defined as a string that is alpha, contains a
+   hyphen (-) char, contains an underscore (_) char, or contains unicode.
+  
+  Example:
+    > say isunicode(testing)
+    You say "1"
+    > say isunicode(testing0)
+    You say "0"
+    > say isunicode(testing-me_%<u2222>)
+    You say "1"
+  
+  See Also: isspace(), isalpha(), isalnum(), isdigit(), isxdigit(), ispunct(),
+            istag(), isword(), isutf8(), isdbref()
+
+& ISUTF8()
+  Function: isutf8(<string>)
+  
+  This function will return '1' if the argument is a valid utf8.  A 
+  valid utf8 is defined as a string that contains entirely utf8 chars.
+  No other characters will be allowed. 
+  
+  Example:
+    > say isutf8(testing)
+    You say "0"
+    > say isutf8(%<u1234>%<u2222>)
+    You say "1"
+    > say isutf8(%<u1234>%<u2222>nope)
+    You say "0"
+  
+  See Also: isspace(), isalpha(), isalnum(), isdigit(), isxdigit(), ispunct(),
+            istag(), isword(), isunicode(), isdbref()
   
 & ISWORD()
   Function: isword(<string>)
   
   This function will return '1' if the argument is a valid word.  A valid word
-  is defined as a string that is totally alpha or contains a hyphen (-) char.
+  is defined as a string that is totally alpha, contains a hyphen (-) char, or
+  contains an accent character.
   
   Example:
     > say isword(testing)
@@ -25613,7 +26417,7 @@
     > say isword(testing-me)
     You say "1"
   
-  See Also: isalnum(), isalpha()
+  See Also: isalnum(), isalpha(), isunicode(), isutf8()
   
 & ISNUM()
   Function: isnum(<string>)
@@ -25837,8 +26641,8 @@
   This is a sideeffect function.
   
   Example:
-    > say cluster_add(#1234,#9876)
-    Cluster object #9876 has been added to #1234
+    > say cluster_add(#12345,#9876)
+    Cluster object #9876 has been added to #12345
   
   See Also: @cluster, cluster_attrcnt(), cluster_default(), cluster_edefault(),
             cluster_get(), cluster_get_eval(), cluster_grep(), 
@@ -27283,7 +28087,7 @@
                                you to read it.  That player MUST have their
                                mail set to be shared by you!
   mail/delete                - This purges all marked mail.
-  mail/forward <num> [<arg>] <player-list>[=[<subject>//]<optionaltext>] 
+  mail/forward[/quick] <num> [<arg>] <player-list>[=[<subj>//]<optionaltext>] 
                                This forwards the target message to the 
                                specified list of players.
   mail/lock <key>            - This locks your mail from the given  player(s).
@@ -27314,8 +28118,8 @@
                                of it, and gives you availability to yank mail
                                that hasn't been read.
   mail/reject [<arg>]        - This sets or resets your reject message.
-  mail/reply [<arg>]<message-#>[<arg>]=[<subject>//]<body> - This replies to
-                               the given message.
+  mail/reply[/quick] [<arg>]<message-#>[<arg>]=[<subject>//]<body> - This 
+                               replies to the given message.
   
   { see help mail cmdlist3 for more }
   
@@ -27361,7 +28165,7 @@
     mail/autofor               - Sets an autoforward to another user.
     mail/check                 - Reads mail in shared mailbox.
     mail/delete                - Purges marked mail.
-    mail/forward               - Forwards a mail message.
+    mail/forward[/quick]       - Forwards a mail message.
     mail/lock                  - Locks mail against user(s).
     mail/mark[/save]           - Marks mail to delete (or save).
     mail/next [-]              - Reads next (or previous) message.
@@ -27373,7 +28177,7 @@
     mail[/read]                - Reads the message (/read switch optional).
     mail/recall                - Recalls a sent message.
     mail/reject                - Sets message to player failing mail lock.
-    mail/reply                 - Replies to a mail message.
+    mail/reply[/quick]         - Replies to a mail message.
     mail[/send]                - Sends message (/send switch optional)
     mail/share                 - Allows you to share your mailbox to others.
     mail/status                - Detail listing of messages in your mailbox.
@@ -27957,9 +28761,12 @@
   See Also: mail write, mail forward, mail reply, mail recall
   
 & mail/reply
+& mail/reply/quick
 & mail reply
-  Command: mail/reply [@|^]<msg #>[*]=[<subject>//]<message>.
+  Command: mail/reply[/quick] [@|^]<msg #>[*]=[<subject>//]<message>.
 
+  Note: The /quick switch will bypass the BRANDY_MAIL toggle.
+  
   Reply to a mail message with your own message.  The @, ^, and * are optional
   to preface or follow the message number.  You can only reply to messages in
   the current folder.  You may also specify an optional subject.
@@ -27976,6 +28783,7 @@
   
   Examples:
     > mail/reply 2=Sure, I'll come to the party.  
+    > mail/reply/quick 2=Sure, I'll come to the party.  
     > mail/reply 1*=What did you mean?
     > mail/reply @12=Why don't we all get together tomorrow?
     > mail/reply ^9*=I'm not sure if we should build that.
@@ -27986,8 +28794,11 @@
   See Also: mail forward, mail send
   
 & mail/forward
+& mail/forward/quick
 & mail forward
-  Command: mail/forward <msg #> [@|^]<list> [=[<subject>//]<additional text>]
+  Command: mail/forward[/quick] <msg #> [@|^]<list> [=[<subj>//]<text>]
+  
+  Note: the /quick switch bypasses the BRANDY_MAIL toggle.
   
   Forward a mail message to someone.  Note that you do not have to include your
   own message, which is appended to the bottom of the message.  The
@@ -27997,6 +28808,7 @@
   
   Examples:
     > mail/forward 3 myfriend
+    > mail/forward/quick 3 myfriend
     > mail/forward 2 &friendlist=Weird!!!//What do you think of this?
     > mail/forward 12 @friend1 #12345 friend2=Can you believe this?!
   
@@ -29723,6 +30535,9 @@
   (which is the default).  See help on 'mail send' for more info on
   how this works.
   
+  Note: using the /quick switch to reply and forward will bypass
+        the editor.
+  
   See Also: mail send, penn_mail toggle, mail_stripreturn toggle
   
 & PENN_MAIL TOGGLE
@@ -29920,6 +30735,51 @@
   
                          help differences
   
+& REGISTERS
+  Topic: REGISTISTERS
+  
+  Registers are used in setq(), setr(), r, and %q functions and substitutions.
+  Registers can be considered temporary variables that will be active during
+  the duration of the execution stack.
+  
+  An execution stack is one (or more) commands that are executed one after
+  the other and will share regiwsters between them.  Once the command set
+  is completed, the registers are unset and cleared for their next use.
+  
+  The original registers were 0-9 and later expanded to a-z.  There
+  resides an ability to set labels (or naming) registers with unique names.
+  
+  The labels of registers may contain whitespace and be the size of an SBUF.
+  An SBUF may be 32 characters or 64 characters depending on what options
+  were set upon your RhostMUSH.  For full compatibility between RhostMUSHs
+  it is recommended to keep your labels under 30 characters in size.
+  
+  The config parameter penn_setq, shown with @list options system or by
+  using the config() function to return it's state (0 off, 1 on), can
+  be used to simplify the labeling of registers.
+  
+  penn_setq will either reset the register with the label or choose the
+  first unlabeled register and apply the label.
+   
+  Examples:
+    > setq(0,foo)     --- set label '0' with string 'foo'
+    > setq(0,foo,bar) --- set label '0' with string 'foo' and label 'bar'
+    > r(0)            --- return value of register 0
+    > r(bar)          --- return value of register with label bar
+    > %q0             --- return value of register 0
+    > %q<0>           --- return value of register 0
+    > %q<bar>         --- return value of register with label bar
+  
+  Examples: (with penn_setq enabled)
+    > setq(bar,foo)   --- set the first free register to 'foo' and label 'bar'
+    > r(0)            --- return value of register 0
+    > r(bar)          --- return value of register with label bar
+    > %q0             --- return value of register 0
+    > %q<0>           --- return value of register 0
+    > %q<bar>         --- return value of register with label bar
+   
+  See Also: setq(), setr(), r(), %q, USER ATTRIBUTES
+
 & USER ATTRIBUTES
   Topic: USER ATTRIBUTES
   
@@ -29939,7 +30799,7 @@
   exist, control of the object you're trying to set it on, or global 
   permissions prefixes that may be established.
   
-  See Also: &, >, @set, set(), @cpattr, @mvattr
+  See Also: &, >, @set, set(), @cpattr, @mvattr, REGISTERS
 
 & UTF8 SUPPORT
 & UNICODE SUPPORT
@@ -30151,17 +31011,42 @@
   
 & RXDESC()
   Function: rxdesc(<target>)
+            rxdesc(<subarg>, <reality>)
   
-  Returns a space separated list of all realitylevel-based descriptions that
-  are visible to <target>. You must control <target>. If no levels are listed,
-  nothing is returned. If you do not control the target, or if the target does
-  not exist, '#-1' is returned.
+  The first form returns a space separated list of all realitylevel-based 
+  descriptions that are visible to <target>. You must control <target>. If no 
+  levels are listed, nothing is returned. If you do not control the target, or 
+  if the target does not exist, '#-1' is returned.
+  
+  The second form will show the specified subarg value for the specified 
+  reality.  You must either be a guildmaster or higher or belong to the
+  specified reality to get the information of that reality.
+  
+  Currently the following <subarg> values are possible:
+    desc   -- show the description attribute name of the specified reality.
+    adesc  -- show the adesc (action description) of the specified reality.
+    value  -- show the bitmask value of the reality in decimal form.
+    hex    -- show the bitmask value of the reality in hexidecimal form.
+
+  The default value 'adesc' will always be returned automatically for any 
+  reality with the 'desc' attribute defined for that reality.
+  
+  The <subarg> 'value' and 'hex' will return '0' for any reality that 
+  you do not have access to or any reality that does not exist.   
   
   Example:
     > say rxdesc(me)
-    You say 'Real specialDesc'.
+    You say "DESC SPECIAL"
     > say rxlevel(me)
-    You say ""
+    You say 'Real specialDesc'.
+    > say rxdesc(desc,real)
+    You say "DESC"
+    > say rxdesc(desc,spec)
+    You say "SPECIAL"
+    > say rxdesc(desc,moo)
+    You ssay "#-1"
+    > say rxdesc(hex,spec)
+    You say "0x00001000"
   
   See Also: hasrxlevel(), hastxlevel(), rxlevel(), txlevel(), listrlevels(),
             chkreality()
@@ -30977,6 +31862,8 @@
   ispunct()     - Returns true if first character of input is a punctuation.
   isspace()     - Returns true if first character of input is a whitespace.
   istag()       - Returns true if passed a valid tag.
+  isunicode()   - Returns true if argument contains only alpha or unicode.
+  isutf8()      - Returns true if the argument contains only unicode.
   isword()      - Returns true if the argument contains only alpha characters. 
   isxdigit()    - Returns true if first character of input is a hexadecimal.
   lcstr()       - Lowercases a string.
@@ -31028,7 +31915,8 @@
   streq()       - Compares two strings, returning true if they match.
   streval()     - Evaluates the string based on the permission level specified.
   strip()       - Strips out every occurrence of a character in a string.
-  stripaccents()- Strip accents from specified string.
+  stripaccents()- Convert string to closest ASCII version.
+  stripunicode()- Alias to stripaccents(), above.
   strlen()      - Returns the length of a string.
   strlenraw()   - Returns the length of the RAW string.
   strlenvis()   - Returns the length of the VISUAL string.
@@ -31066,9 +31954,14 @@
      
   convsecs()    - Converts Unix seconds to a time string.
   convtime()    - Converts a time string to Unix seconds.
+  listtzones()  - List all valid timezones recognized by the server.
+  msecs()       - Returns the current time in Unix miliseconds.
+  msecstz()     - Returns the current time in Unix miliseconds based on tz.
   ptimefmt()    - Performs time formatting, PennMUSH style.
   secs()        - Returns the current time in Unix seconds.
+  secstz()      - Returns the current time in Unix seconds based on tz.
   singletime()  - Converts seconds to a single time element.
+  runintz()     - Run the arguments in specified timezone.
   time()        - Returns the current time, formatted as a string.
   timefmt()     - Returns the current, or a specified time, formatted.
 
@@ -31223,7 +32116,7 @@
   Developers who are MIA or retired are surrounded in []'s.
    
   ***************************************************************************
-  *** Current Revision: 4.2.0
+  *** Current Revision: 4.2.2
   ***************************************************************************
   
   Available Revisions:
@@ -31243,7 +32136,7 @@
     3.9.5: 3.9.5p0, 3.9.5p1, 3.9.5p2, 3.9.5p3, 3.9.5p4
     4.0.0: 4.0.0p0, 4.0.0p1, 4.0.0p2, 4.0.0p3, 4.0.0p4
     4.1.0: 4.1.0p0, 4.1.0p1, 4.1.0p2
-      4.2: 4.2.0, 4.2.1
+      4.2: 4.2.0, 4.2.1, 4.2.2
   
   See Also: historical, credits
 
@@ -34130,10 +35023,14 @@
  * Updated 'help global_ansimask' to be actually accurate. [AMB]
  * Fixed PM times higher than 11:00. This now even allows for 'weird' PM
    times like 13:00 PM [AMB]
+ * hastotem(), ortotem() and andtotem() are now correctly being case-
+   insensitive in totem names [AMB]
+ * privatize() now actually uses the second argument if the first is 0.
+   The function NOP'd before. Bug and fix by Thenomain and Polk [AMB]
 
 & 4.2.1
   Release Date: 09/13/21
-
+  
   New Features
   ------------
  * Added codepoint() as an unrestricted version of chr(). Usage is limited
@@ -34145,7 +35042,15 @@
  * @stat/free will show free list (or next free) depending on perms [ASH]
  * @power USE_FREELIST allows players to create/dig/open/etc by specifying
    an optional free dbref# [ASH]
-
+ * !!help/txt, !!~help/txt and !!-help/txt include options for help,
+   wizhelp, and plushelp files. [ASH]
+ * sample entry in wizhelp.txt for how includes work (wizhelp helpinc) [ASH]
+ * guest_displaylastsite to toggle displaying guest last connect info [ASH]
+ * sort() and sortlist() now have an 'i' option for case-insensitive
+   comparisons [AMB]
+ * ncomp() is now able to handle 64bit floats [MYR]
+ * Added more characters to the automagic UTF8-non-UTF8 converter [AMB]
+  
   Changes
   -------
  * Big internal change: Added a new field to connection Descriptors to hold
@@ -34155,9 +35060,156 @@
    This needs thorough testing. [AMB]
  * locked down codepoint() so substitutions passed are locked to 
    immortals [ASH]
-
+ * @dig is more descriptive on dbref#'s created and linked to/from [ASH]
+ * rxdesc() takes optionally 2 arguments to show a specified reality's 
+   desc or @adesc [ASH]
+ * reality levels have optional @adesc trigger for each unique description.
+ * when you exceed max args for commands or functions, it now warns you [ASH]
+ * global_attrdefault handles argument '%1' for target attrib set on [ASH]
+ * value and hex args added to rxdesc() [ASH]
+ * reordered @list power/@list depower to be alphanumerical [ASH]
+ * built in functions, @functions, or @lfunctions set DARK will only show
+   listings for wizards or higher now but still useable by anyone [ASH]
+ * listprotections() now will do reverse lookups for wizards [ASH]
+ * grep() rewritten for no-wild matchh to use strstr [ASH]
+ * escapex() takes more arguments for specific exclusions [ASH]
+ * objeval() takes special arg for wiz handling like a sudo() function [ASH]
+ * runintz() function to force-run any functions in a specified timezone [ASH]
+  
   Bug Fixes
   ------------
  * The system didn't allow people with the LONG_FINGERS @power to @destroy
    remote exits. [AMB]
-
+ * unicode markup now handles identifier of 'u' and 'U' for markup. [ASH]
+ * @dig would not accept specifying dbref#'s for in/out exits [ASH]
+ * SIGSEGV crash issue with storing last command via %-p [ASH]
+ * mail/reply and mail/forward with BRANDY_MAIL enabled would validate
+   message number only at the send.  Now it does it before [ASH]
+ * @rxlevel/@txlevel didn't properly handle empty entries after a
+   successful entry [ASH]
+ * @rxlevel/@txlevel had a memory leak with empty/invalid lists [ASH]
+ * @hook/list didn't properly show hooking '}' properly [ASH]
+ * fix introduced bug (this patchlevel) of mail/reply with spaces [ASH]
+ * @tag/list had a one-off and wasn't well documented [ASH]
+ * grep() with no-wild doesn't always work plus bug in #dbref/attr output [ASH]
+ * escapex could crash on input (introduced this patch)
+ * Standards compliance fixes for the web API by Polk [AMB]
+ * Fix for Websocket POST crash by Polk [AMB]
+  
+& 4.2.2
+  Release Date: 05/01/22
+  
+  New Features
+  ------------
+ * @atrcache -- A method to cache an evaluation into a buffer for 
+   sticky content until a pre-defined cache expire is met [ASH]
+ * atrcache(<cache>) -- function to fetch the specified cache [ASH]
+ * %-h<cache> -- substitution version of the function above [ASH]
+ * atrcachemax -- max number of caches allowed (10 default, 200 max) [ASH]
+ * exec64 handler for API to 64 encapsulate the input [ASH]
+ * max_api_timeout -- maximum timeout value for the API connection [ASH]
+ * finally got around to adding @totem/clean [ASH]
+ * added the ability to define totem slots as hardcode reserved [ASH]
+ * @totemdef has a /slot option to show locked slots to hardcode [ASH]
+ * totemvalid() wiz function to show specific totem markers [ASH]
+ * grab is a force recache and fetch combined for atrcache() [ASH]
+ * player_absolute config param does local alias matches for players [ASH]
+ * SETQLABEL @totem to protect labeled registers from being overwritten [ASH]
+ * @admin setqlabel like SETQLABEL @totem but globally [ASH]
+ * Lua support for the WebAPI. Configurable with 'make config' [POLK]
+ * execscriptnr() like execscript but no longer passing registers [ASH]
+ * Compile time option for BOOSTING registers from 36 to high values [ASH]
+ * Compile time option to increase total allowable @atrcache max [ASH]
+ * register_count 'fake' config param to display total registers [ASH]
+ * Added @flaglevel to allow, per-object, to change the bitlevel at which
+   the NO_MODIFY and NO_EXAMINE flags take effect [AMB]
+ * Added > 2.1b+ attributes num internal attrib handler (40 million) [ASH]
+ * PROMPT @totem to enable prompts permanently while enabled [ASH]
+ * execscripthome config parameter for overriding directory for scripts [ASH]
+ * config parameter strfunc_softfuncs to control strfunc with softfuncs [ASH]
+ * @atrcache will optionally handle caches per command and handles args [ASH]
+ * secstz()/msecstz() for EPOCH seconds based on specified timezone [ASH]
+ * listtzone() for listing timezones and offset of timezone [ASH]
+ * ljc/rjc/ljust/rjust/center are now ANSI and UTF8 aware [ASH]
+ * regmatch() now allows named registers [ASH]
+ * creplace() is ansi/utf8 aware and has new 'r' argument [ASH]
+ * isutf8() and isunicode() for utf8/unicode-word validation [ASH]
+ * isword(), isnum(), isalnum(), isalpha(), isint(), isdigit(), islower(),
+   ispunct(), isspace(), isupper(), isxdigit() UTF8 and ANSI aware [ASH]
+ * @enable/@disable for vattrchecking -- automate reusing deleted attribs [ASH]
+ * @attribute/show, @attribute/load -- load cache for reuseable attris [ASH]
+ * vattr_interval to specify interval of when the cache is refreshed [ASH]
+ * pos() and totpos() handles UTF8/ansi [ASH]
+ * numpos() is now UTF8/ANSI aware [ASH]
+ * elementpos()'s delim is now UTF8 aware [ASH]
+ * @list alloc cquick for a color encoded buffer listing [ASH]
+ * timezone config parameter to specify the timezone for the mush [ASH]
+ * runintz() to sandbox functions in a specific timezone [ASH]
+ * added /db switch to @decompile [ASH]
+  
+  Changes
+  -------
+ * Allocations modified to add the new buffers for caches [ASH]
+ * @list alloc shows values for the new atrcache handler [ASH]
+ * evaluation stack modified for new substitution handling
+ * game load engine modified for new cache handling
+ * atrcache() handles sub-arguments for owner/immortal [ASH]
+ * /quick with mail/reply and mail/forward will bypass BRANDY_MAIL [ASH]
+ * API now allows multiple transactions [ASH]
+ * API is aggressively queued to insure faster response [ASH]
+ * /query switch to help, wizhelp, etc does color matching cleaner [ASH]
+ * @totem/clean takes optional target player and target MASK [ASH]
+ * @totem/validate can now target a specific player [ASH]
+ * Cleanup of @*def commands and variable defines [ASH]
+ * Improvement of help for printf/@sex [ASH]
+ * totem help expanded on [ASH]
+ * @totem, @set, and @toggle have improved help on mixing them up [ASH]
+ * Enbedding optional config handler for config menu [ASH]
+ * protection for LUA for API [ASH]
+ * @saystring optionally evaluates with saystring_eval config [ASH]
+ * Modified @list alloc to show internal attrib overhead [ASH]
+ * split options in @list options to subcatagories optionally [ASH]
+ * PID() has optional argument to show all processes by player [ASH]
+ * strfunc() optionally handles @function and @lfunction [ASH]
+ * @atrcache/interval handles '0' for per-command updates [ASH]
+ * @atrcache was unoptimized for some loop conditions [ASH]
+ * escapex() now handles option '8' for UTF8 [ASH]
+ * time() now is timezone aware optionally.
+ * stripunicode is now an alias to stripaccents [ASH]
+ * Rewrote all the API handlers to be centralized [ASH]
+ * Max pids and formatting raised from 32K to 256K queues [ASH]
+ * isword() now recogizes accents [ASH]
+ * functions for timezone awareness now warn on invalid TZ [ASH]
+ * ptimefmt() is now TZ aware
+ * wrap defaults to LEFT justify if no justification given [ASH]
+    
+  Bug Fixes
+  ------------
+ * (introduced this version) @atrcache stronger perms [ASH]
+ * API could potentially hang with inactivity [ASH]
+ * API POST was not HTML compliant [ASH]
+ * Compiling without OPENSSL would kick out an error [ASH]
+ * totems were not reset on destroyed objects [ASH]
+ * setq/setr didn't always display error on null labels [ASH]
+ * setqlabel didn't always check label properly [ASH]
+ * hasquota() was checking for the UNL_QUOTA depower on the user instead
+   of the target [AMB]
+ * off by one register initialization in low level stack routine [ASH]
+ * improvement on label warnings for registers [ASH]
+ * some issues with the built in timer for alarm handling [ASH]
+ * display in @list alloc had some erraneous values [ASH]
+ * potential issue with a race condition on CPU alarm for API [ASH]
+ * Hardening of some internal conditionals against db corruption [ASH]
+ * compile issues without including ZENTY_ANSI on compiles [ASH]
+ * @rxlevel/@txlevel did not honor the QUIET flag [ASH]
+ * suspect site was erraneously tagged with some site configs [ASH]
+ * strlenvis() was not UTF8 aware [ASH]
+ * LBUF overflow in lua code [ASH]
+ * zoneinfo was not set up properly for BSD [ASH]
+ * key help for ansi_aware functions (like delete() and tr()) reversed [ASH]
+ * elementpos() did not process utf8/ansi properly for delim [ASH]
+ * bug introduced in numpos() with UTF8 fixed [ASH]
+ * range option to creplace() was not working [ASH]
+ * timefmt() assumed 'timezone' variable which not in non-posix systems [ASH]
+ * timefmt() had to have 't' option re-handled for non posix systems [ASH]
+ * time() could potentially mangle the timezones with wrong args [ASH]

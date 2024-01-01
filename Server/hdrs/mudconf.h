@@ -17,6 +17,10 @@
 /* CONFDATA:	runtime configurable parameters */
 
 #define MAXEVLEVEL	10
+
+/* Define max attribute caches for recycling */
+#define MAXVATTRCACHE 100000
+
 typedef unsigned char Uchar;
 
 typedef struct confdata CONFDATA;
@@ -97,9 +101,11 @@ struct confdata {
 	char	postdump_msg[128];  /* Message displayed after @dump-ing */
         char  spam_msg[128];    /* Message displayed when spammonitor kicks in */
         char  spam_objmsg[128]; /* Message displayed when object spammonitor kicks in */
+	int	max_api_timeout;	/* Maximum API timeout value -- default 1 */
 	int	mailmutt;	/* Is MUTT the mail program of choice */
 	int	whereis_notify;
 	int	max_size;
+	int	totem_reserved[TOTEM_SLOTS];	/* Reservations of totems */
 	int	name_spaces;	/* allow player names to have spaces */
 	int	fork_dump;	/* perform dump in a forked process */
 	int	fork_vfork;	/* use vfork to fork */
@@ -113,6 +119,7 @@ struct confdata {
 	int	idle_timeout;	/* Boot off players idle this long in secs */
 	int	conn_timeout;	/* Allow this long to connect before booting */
 	int	idle_interval;	/* when to check for idle users */
+	int	vattr_interval;	/* when to check for idle users */
 	int	retry_limit;	/* close conn after this many bad logins */
 	int	regtry_limit;
 	int	output_limit;	/* Max # chars queued for output */
@@ -248,6 +255,7 @@ struct confdata {
         int     allow_whodark;  /* Allows players set DARK from not showing on WHO */
         int     allow_ansinames;/* Allows names of all dbtypes to be ansified */
                                 /* 0:none/1:player/2:thing/4:room/8:exit/15:everything */
+	int	player_absolute;/* Allow absolute player name matches at location */
         int     who_comment;    /* Allows the (Bummer) and other messages in WHO */
         int     safe_wipe;      /* Anything set SAFE or INDESTRUCTIBLE can't be @wiped */
         int     secure_jumpok;  /* Sorry, only arch and higher can set jump_ok on non-rooms */
@@ -271,6 +279,8 @@ struct confdata {
         int     restrict_home2; /* Define level of restriction (2nd word) */
 	char    invname[80];    /* Define name of inventory type - default 'backpack' */
 	int     sideeffects;	/* Define sideeffects (set-1,create-2,link-4,pemit-8,tel-16) */
+	char	timezone[32]; 	/* Define timezone for the mush */
+	int     setqlabel;	/* Enforce only using labels for setq if label present */
 	int	raw_formatting; /* Allow raw input formatting */
 	int	enforce_checksums; /* Enforce checksums on command matching */
 	int     restrict_sidefx; /* Restrict setting side-effects to bitlevel (0 default/any) */
@@ -415,12 +425,15 @@ struct confdata {
 	char	cap_articles[LBUF_SIZE];	/* caplist exceptions */
 	char	cap_preposition[LBUF_SIZE];	/* caplist exceptions */
 	char	execscriptpath[LBUF_SIZE];	/* execscript path overrides */
+	char	execscripthome[LBUF_SIZE];	/* execscript home override */
         char    atrperms[LBUF_SIZE];
         int	atrperms_max;
+	int 	strfunc_softfuncs;	/* Allow soft functgions for strfunc -- 1 @function, 2 @function + @lfunction */
         int	atrperms_checkall;	/* Go through and check all @aflag perms -- can be expensive if enabled */
         int	safer_ufun;
 	int	includenest;	/* Max number of nesting of @include */
 	int	includecnt;	/* Total number of @includes in the command caller */
+	int	atrcachemax;	/* Maximum atrcaches allowed -- 200 hard cap */
 	int	lfunction_max;	/* Maximum lfunctions allowed */
 	int	function_max;	/* Maximum functions allowed */
         int	blind_snuffs_cons;	/* Does the BLIND flag snuff aconnect/adisconnect */
@@ -455,9 +468,11 @@ struct confdata {
 	char	vercustomstr[SBUF_SIZE];	/* Customized string for @version */
         int	totem_types;	/* Enable flag compatible types for totems */
 	int	totem_rename;	/* Allow totem renames for (1) static or (2) perm or (3) both */
+	int	guest_displaylastsite;
 	int	connect_methods;		/* Disable optionally connect methods */
 	int	blacklist_max;	/* Maximum blacklists allowed */
 	int	connect_perm;	/* Connect permissions */
+	int	saystring_eval;	/* Does @saystring evaluate */
 	char	string_conn[SBUF_SIZE];		/* String for the connect command */
 	char	string_create[SBUF_SIZE];	/* String for the connect command */
 	char	string_conndark[SBUF_SIZE];	/* String for the dark connect */
@@ -470,6 +485,7 @@ struct confdata {
             char name[17];	/* name of level */
             RLEVEL value;	/* bitmask for level */
             char attr[33];	/* RLevel desc attribute */
+            int has_adesc;	/* Does reality level have an associated adesc */
         } reality_level[32];	/* Reality levels */
         int wiz_always_real;	/* Wizards are always real */
 	int reality_locks;	/* Allow user-lock to be reality lock */
@@ -502,6 +518,7 @@ struct confdata {
 	int	mtimer;		/* The millisecond timer offset range (default 10) */
 	int hastype_always_zero; /* Make hastype() return zero on invalid objects */
 #else
+  int     imm_nomod;	/* Change NOMODIFY to immortal only perm */
 	int	paylimit;	/* getting money gets hard over this much */
 	int	digcost;	/* cost of @dig command */
 	int	opencost;	/* cost of @open command */
@@ -539,6 +556,7 @@ struct confdata {
 	char	vercustomstr[SBUF_SIZE];
         int	totem_types;	/* Enable flag compatible types for totems */
 	int	totem_rename;	/* Allow totem renames for (1) static or (2) perm or (3) both */
+	int	guest_displaylastsite;
 #endif	/* STANDALONE */
 };
 
@@ -672,6 +690,7 @@ struct statedata {
 	double	dump_counter;	/* Countdown to next db dump */
 	double	check_counter;	/* Countdown to next db check */
 	double	idle_counter;	/* Countdown to next idle check */
+	double	vattr_counter;	/* Countdown to next vattr check */
 	double	rwho_counter;	/* Countdown to next RWHO dump */
 	double	mstats_counter;	/* Countdown to next mstats snapshot */
 	time_t  chkcpu_stopper; /* What time was it when command started */
@@ -702,6 +721,7 @@ struct statedata {
 	char	guild_hdr[12];
         char    last_command[LBUF_SIZE]; /* Easy buffer of last command */
 	int	global_error_inside;	/* Are we inside the global error obj */
+	int	execscript_noreg;	/* Do not cache any setq regs to execscript */
 	SITE	*access_list;	/* Access states for sites */
 	SITE	*suspect_list;	/* Sites that are suspect */
 	SITE	*special_list;	/* Sites that have special requirements */
@@ -735,6 +755,10 @@ struct statedata {
         int	totem_slots[TOTEM_SLOTS];/* totem slots */
 	int	errornum;
 	int	attr_next;	/* Next attr to alloc when freelist is empty */
+	int 	vattr_reuse[MAXVATTRCACHE + 1];
+	int 	vattr_reuseptr;
+	int 	vattr_reusecnt;
+
 	int	no_space_compress;	/* State data to not allow space compress */
 	BQUE	*qfirst;	/* Head of player queue */
 	BQUE	*qlast;		/* Tail of player queue */
@@ -768,9 +792,9 @@ struct statedata {
 	int	ntfy_nest_lev;	/* Current nesting of notifys */
 	int	lock_nest_lev;	/* Current nesting of lock evals */
         int     ufunc_nest_lev; /* Current nesting of USER functions */
-	char	*global_regs[MAX_GLOBAL_REGS];	/* Global registers */
-	char	*global_regsname[MAX_GLOBAL_REGS];	/* Global register names */
-        char    *global_regs_backup[MAX_GLOBAL_REGS];
+	char	*global_regs[MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST];	/* Global registers */
+	char	*global_regsname[MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST];	/* Global register names */
+        char    *global_regs_backup[MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST];
         char    nameofqreg[37]; /* Buffer to hold qregs */
         int	global_regs_wipe;	/* Toggle to wipe localized regs */
 	int	mail_state;
@@ -840,11 +864,13 @@ struct statedata {
 	dbref	last_network_owner;	/* The last network owner who had network issues */
 	FILE	*f_logfile_name;
         int	log_chk_reboot;
+	int	help_shell;	/* Shell to the next help index */
 	int	blacklist_cnt;
 	int	blacklist_nodns_cnt;
 	int	wipe_state;	/* do_wipe state counter */
 	int	includecnt;	/* @include count */
 	int	includenest;	/* @include nest count */
+	int	atrcachemax;	/* Maximum atrcaches allowed -- 200 hard cap */
 	int	nocodeoverride;	/* Override NO_CODE flag for objeval() */
 	int	notrace;	/* Do not trace */
 	int	start_of_cmds;	/* Start of command -- hack around zenty ansi */
@@ -875,6 +901,9 @@ struct statedata {
 	char	buffer[256];	/* A buffer for holding temp stuff */
         char    *lbuf_buffer;	/* An lbuf buffer we can globally use */
 	int	attr_next;	/* Next attr to alloc when freelist is empty */
+	int 	vattr_reuse[MAXVATTRCACHE + 1];
+	int 	vattr_reuseptr;
+	int 	vattr_reusecnt;
 	ALIST	iter_alist;	/* Attribute list for iterations */
 	char	*mod_alist;	/* Attribute list for modifying */
 	int	mod_size;	/* Length of modified buffer */
@@ -889,6 +918,7 @@ struct statedata {
 	dbref	vlplay;
 	FILE	*f_logfile_name;
         int	log_chk_reboot;
+	int	help_shell;	/* Shell to the next help index */
 	MARKBUF	*markbits;	/* temp storage for marking/unmarking */
 #endif	/* STANDALONE */
 };
@@ -916,6 +946,7 @@ extern STATEDATA mudstate;
 #define CF_RWHO_XMIT	0x0040		/* Update remote RWHO data */
 #define CF_ALLOW_RWHO	0x0080		/* Allow the RWHO command */
 #define CF_DEQUEUE	0x0100		/* Remove entries from the queue */
+#define CF_VATTRCHECK	0x0200		/* Vattr Cache Check */
 
 /* Host information codes */
 

@@ -158,7 +158,7 @@ void do_name(dbref player, dbref cause, int key, char *name, char *newname)
       return;
    }
 
-   if ( (NoMod(thing) && !WizMod(player)) || (DePriv(player,Owner(thing),DP_MODIFY,POWER7,NOTHING) &&
+   if ( (NoMod(thing) && !WizMod(player) && (obj_nomodlevel(thing) > obj_bitlevel(player))) || (DePriv(player,Owner(thing),DP_MODIFY,POWER7,NOTHING) &&
         (Owner(player) != Owner(thing))) || (Backstage(player) && NoBackstage(thing) && !Immortal(player))) {
       notify(player, "Permission denied.");
       return;
@@ -306,7 +306,7 @@ char	*oldalias, *trimalias;
 		oldalias = atr_pget(thing, A_ALIAS, &aowner, &aflags);
 		trimalias = trim_spaces(alias);
 
-                if ( NoMod(thing) && !WizMod(player) ) {
+                if ( NoMod(thing) && !WizMod(player) && (obj_nomodlevel(thing) > obj_bitlevel(player))) {
 			notify_quiet(player, "Permission denied.");
                 } else if (!Controls(player, thing) &&
                     !could_doit(player,thing,A_LTWINK,0,0)) {
@@ -400,7 +400,7 @@ void do_lock(dbref player, dbref cause, int key, char *name, char *keytext)
           * you are not #1 and are trying to do something to #1.
           */
 
-         nomtest = ((NoMod(thing) && !WizMod(player)) || 
+         nomtest = ((NoMod(thing) && !WizMod(player) && (obj_nomodlevel(thing) > obj_bitlevel(player))) || 
                     (DePriv(player,Owner(thing),DP_MODIFY,POWER7,NOTHING) && (Owner(player) != Owner(thing))) || 
                     (Backstage(player) && NoBackstage(thing) && !Immortal(player)));
          if (ap && !nomtest && (God(player) ||
@@ -449,7 +449,7 @@ void do_lock(dbref player, dbref cause, int key, char *name, char *keytext)
       return;
    }
 
-   if ( (NoMod(thing) && !WizMod(player)) || 
+   if ( (NoMod(thing) && !WizMod(player) && (obj_nomodlevel(thing) > obj_bitlevel(player))) || 
         (DePriv(player,Owner(thing),DP_MODIFY,POWER7,NOTHING) && (Owner(player) != Owner(thing))) || 
         (Backstage(player) && NoBackstage(thing) && !Immortal(player))) {
       notify_quiet(player, "Permission denied.");
@@ -527,7 +527,7 @@ void do_unlock(dbref player, dbref cause, int key, char *name)
    NAMETAB *nt;
 
    if (parse_attrib(player, name, &thing, &atr)) {
-      if ( Good_obj(thing) && (NoMod(thing) && !WizMod(player)) ) {
+      if ( Good_obj(thing) && (NoMod(thing) && !WizMod(player) && (obj_nomodlevel(thing) > obj_bitlevel(player))) ) {
          notify_quiet(player, "Permission denied.");
          return;
       }
@@ -576,7 +576,7 @@ void do_unlock(dbref player, dbref cause, int key, char *name)
    }
 
    if ((thing = match_controlled(player, name)) != NOTHING) {
-      if ( Good_obj(thing) && (NoMod(thing) && !WizMod(player)) ) {
+      if ( Good_obj(thing) && (NoMod(thing) && !WizMod(player) && (obj_nomodlevel(thing) > obj_bitlevel(player))) ) {
          notify_quiet(player, "Permission denied.");
          return;
       }
@@ -635,7 +635,7 @@ dbref	exit;
 		notify_quiet(player, "I don't know which one you mean!");
 		break;
 	default:
-                if ( NoMod(exit) && !WizMod(player) ) {
+                if ( NoMod(exit) && !WizMod(player) && (obj_nomodlevel(exit) > obj_bitlevel(player))) {
 			notify_quiet(player, "Permission denied.");
                 } else if (!controls(player, exit) &&
                     !could_doit(player,exit,A_LTWINK,0,0)) {
@@ -686,7 +686,7 @@ void do_chown(dbref player, dbref cause, int key, char *name, char *newown)
   bLeaveFlags = (key & CHOWN_PRESERVE) && Wizard(player);
   
   if (parse_attrib(player, name, &thing, &atr)) {
-    if ( Good_obj(thing) && (NoMod(thing) && !WizMod(player)) ) {
+    if ( Good_obj(thing) && (NoMod(thing) && !WizMod(player) && (obj_nomodlevel(thing) > obj_bitlevel(player))) ) {
       notify_quiet(player, "Permission Denied.");
       return;
     }
@@ -769,6 +769,7 @@ void do_chown(dbref player, dbref cause, int key, char *name, char *newown)
   if(Privilaged(player) || HasPriv(player,NOTHING,POWER_CHOWN_ANYWHERE,POWER3,POWER_LEVEL_NA)) {
     match_player();
     match_absolute();
+    match_player_absolute();
   }
   
   thing = match_result();
@@ -831,7 +832,7 @@ void do_chown(dbref player, dbref cause, int key, char *name, char *newown)
 	     (DePriv(player,Owner(thing),DP_CHOWN_OTHER,POWER7,NOTHING) && (player != Owner(thing))) ||
 	     (DePriv(player,owner,DP_CHOWN_OTHER,POWER7,NOTHING) && (player != owner))) {
     notify_quiet(player, "Permission denied.");
-  } else if ( Good_obj(thing) && (NoMod(thing) && !WizMod(player)) ) {
+  } else if ( Good_obj(thing) && (NoMod(thing) && !WizMod(player) && (obj_nomodlevel(thing) > obj_bitlevel(player))) ) {
     notify_quiet(player, "Permission Denied.");
   } else if (canpayfees(player, owner, cost, quota, Typeof(thing))) {
     giveto(Owner(thing), cost, NOTHING);
@@ -980,7 +981,7 @@ static void set_attr_internal (dbref player, dbref thing, int attrnum,
 {
 dbref	aowner, aowner2;
 int	aflags, could_hear, aflags2;
-char    *buff2, *buff2ret, *tpr_buff, *tprp_buff;
+char    *buff2, *buff2ret, *tpr_buff, *tprp_buff, *tcont[2];
 ATTR	*attr;
 
    if ( i_chk )
@@ -1009,8 +1010,12 @@ ATTR	*attr;
          buff2 = alloc_lbuf("global_attr_chk");
          atr_get_str(buff2, mudconf.global_attrdefault, attrnum, &aowner2, &aflags2);
          if ( *buff2 ) {
+            tcont[0] = attrtext;
+            tcont[1] = alloc_sbuf("see_attr_internal_thingy");
+            sprintf(tcont[1], "#%d", thing);
             buff2ret = cpuexec(player, mudconf.global_attrdefault, mudconf.global_attrdefault,
-                               EV_STRIP | EV_FCHECK | EV_EVAL, buff2, &attrtext, 1, (char **)NULL, 0);
+                               EV_STRIP | EV_FCHECK | EV_EVAL, buff2, tcont, 2, (char **)NULL, 0);
+            free_sbuf(tcont[1]);
             if ( atoi(buff2ret) == 0 ) {
                free_lbuf(buff2);
                free_lbuf(buff2ret);
@@ -1125,7 +1130,7 @@ void do_toggle(dbref player, dbref cause, int key, char *name, char *toggle)
 	  notify(player,pt1);
 	  free_lbuf(pt1);
 	} else {
-          if ( NoMod(thing) && !WizMod(player) ) {
+          if ( NoMod(thing) && !WizMod(player) && (obj_nomodlevel(thing) > obj_bitlevel(player))) {
              notify_quiet(player, "Permission denied.");
           } else { 
              if (key == TOGGLE_CLEAR) {
@@ -1319,7 +1324,7 @@ do_lset(dbref player, dbref cause, int key, char *name, char *flag)
       return;
    }
 
-   nomtest = ( (NoMod(it) && !WizMod(player)) ||
+   nomtest = ( (NoMod(it) && !WizMod(player) && (obj_nomodlevel(it) > obj_bitlevel(player))) ||
                (DePriv(player,Owner(it),DP_MODIFY,POWER7,NOTHING) && (Owner(player) != Owner(it))) ||
                (Backstage(player) && NoBackstage(it) && !Immortal(player)));
 
@@ -1635,7 +1640,7 @@ void do_mvattr (dbref player, dbref cause, int key, char *what,
   dbref	thing, aowner, axowner, aowner2;
   ATTR	*in_attr, *out_attr;
   int	i, anum, in_anum, aflags, axflags, did_one, con1, twk1, no_wipe, aflags2, stop_set;
-  char	*astr, *buff2, *buff2ret, *tpr_buff, *tprp_buff;
+  char	*astr, *buff2, *buff2ret, *tpr_buff, *tprp_buff, *tcont[2];
   
   /* Make sure we have something to do. */
   
@@ -1680,6 +1685,7 @@ void do_mvattr (dbref player, dbref cause, int key, char *what,
   did_one = 0;
   buff2 = alloc_lbuf("global_attr_chk");
   tprp_buff = tpr_buff = alloc_lbuf("do_mvattr");
+  tcont[1] = alloc_sbuf("do_mvattr_thingy");
   for (i=1; i<nargs; i++) {
     stop_set = 0;
     if ( strlen(args[i]) >= SBUF_SIZE ) 
@@ -1734,8 +1740,10 @@ void do_mvattr (dbref player, dbref cause, int key, char *what,
                   (thing != mudconf.global_attrdefault) ) {
          atr_get_str(buff2, mudconf.global_attrdefault, out_attr->number, &aowner2, &aflags2);
          if ( *buff2 ) {
+            tcont[0] = astr;
+            sprintf(tcont[1], "#%d", thing);
             buff2ret = exec(player, mudconf.global_attrdefault, mudconf.global_attrdefault,
-                            EV_STRIP | EV_FCHECK | EV_EVAL, buff2, &astr, 1, (char **)NULL, 0);
+                            EV_STRIP | EV_FCHECK | EV_EVAL, buff2, tcont, 2, (char **)NULL, 0);
             if ( atoi(buff2ret) == 0 ) {
                notify_quiet(player, safe_tprintf(tpr_buff, &tprp_buff, 
                                     "%s: Permission denied: String does not match unique attribute lock.", args[i]));
@@ -1776,6 +1784,7 @@ void do_mvattr (dbref player, dbref cause, int key, char *what,
   }
   free_lbuf(tpr_buff);
   free_lbuf(buff2);
+  free_sbuf(tcont[1]);
   
   /* Remove the source attribute if we can. */
   
@@ -2189,7 +2198,7 @@ void do_edit(dbref player, dbref cause, int key, char *it,
 {
 dbref	thing, aowner, aowner2;
 int	attr, got_one, aflags, doit, aflags2, editchk, editsingle, i_compat, i_tog;
-char	*from, *to, *result, *retresult, *atext, *buff2, *buff2ret, *tpr_buff, *tprp_buff;
+char	*from, *to, *result, *retresult, *atext, *buff2, *buff2ret, *tpr_buff, *tprp_buff, *tcont[2];
 ATTR	*ap;
 OBLOCKMASTER master;
 
@@ -2239,6 +2248,7 @@ OBLOCKMASTER master;
 	atext = alloc_lbuf("do_edit.atext");
 
         tprp_buff = tpr_buff = alloc_lbuf("do_edit");
+        tcont[1] = alloc_sbuf("do_edit_thingy");
 	for (attr=olist_first(&master); attr!=NOTHING; attr=olist_next(&master)) {
 		ap = atr_num(attr);
 		if (ap) {
@@ -2280,9 +2290,11 @@ OBLOCKMASTER master;
                                    buff2 = alloc_lbuf("global_attr_chk");
                                    atr_get_str(buff2, mudconf.global_attrdefault, ap->number, &aowner2, &aflags2);
                                    if ( buff2 && *buff2 ) {
+                                      tcont[0] = result;
+                                      sprintf(tcont[1], "#%d", thing);
                                       buff2ret = exec(player, 
                                                       mudconf.global_attrdefault, mudconf.global_attrdefault,
-                                                      EV_STRIP | EV_FCHECK | EV_EVAL, buff2, &result, 1, (char **)NULL, 0);
+                                                      EV_STRIP | EV_FCHECK | EV_EVAL, buff2, tcont, 2, (char **)NULL, 0);
                                       if ( buff2ret && *buff2ret && atoi(buff2ret) == 0 ) {
                                          tprp_buff = tpr_buff;
                                          notify_quiet(player,
@@ -2357,10 +2369,11 @@ OBLOCKMASTER master;
 
 		}
 	}
-        free_lbuf(tpr_buff);
 
 	/* Clean up */
 
+        free_lbuf(tpr_buff);
+        free_sbuf(tcont[1]);
 	free_lbuf(atext);
 	olist_cleanup(&master);
 
@@ -2832,8 +2845,8 @@ void do_include(dbref player, dbref cause, int key, char *string,
    dbref thing, owner, target;
    int attrib, flags, i, x, i_savebreak, i_rollback, i_jump, chk_tog, i_chkinline;
    time_t  i_now;
-   char *buff1, *buff1ptr, *cp, *pt, *s_buff[10], *savereg[MAX_GLOBAL_REGS],
-        *npt, *saveregname[MAX_GLOBAL_REGS], *s_rollback;
+   char *buff1, *buff1ptr, *cp, *pt, *s_buff[10], *savereg[MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST],
+        *npt, *saveregname[MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST], *s_rollback;
 
    if ( desc_in_use != NULL ) {
       notify_quiet(player, "You can not use @include at command line.");
@@ -2902,7 +2915,7 @@ void do_include(dbref player, dbref cause, int key, char *string,
       }
    }
    if ( (key & INCLUDE_LOCAL) || (key & INCLUDE_CLEAR) ) {
-      for (x = 0; x < MAX_GLOBAL_REGS; x++) {
+      for (x = 0; x < (MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST); x++) {
          savereg[x] = alloc_lbuf("ulocal_reg");
          saveregname[x] = alloc_sbuf("ulocal_regname");
          pt = savereg[x];
@@ -2955,7 +2968,7 @@ void do_include(dbref player, dbref cause, int key, char *string,
    strcpy(mudstate.rollback, s_rollback);
    free_lbuf(s_rollback);
    if ( (key & INCLUDE_LOCAL) || (key & INCLUDE_CLEAR) ) {
-      for (x = 0; x < MAX_GLOBAL_REGS; x++) {
+      for (x = 0; x < (MAX_GLOBAL_REGS + MAX_GLOBAL_BOOST); x++) {
          pt = mudstate.global_regs[x];
          npt = mudstate.global_regsname[x];
          safe_str(savereg[x],mudstate.global_regs[x],&pt);
@@ -3080,6 +3093,7 @@ int	ibf = -1;
 	if (Wizard(player)) {
 		match_absolute();
 		match_player();
+		match_player_absolute();
 	}
 	match_me();
 	match_here();

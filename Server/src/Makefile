@@ -67,11 +67,32 @@ else
    MYSQL_O=
 endif
 
-CHK = $(shell uname -s|grep -c "Darwin")
-ifeq "$(CHK)" "1"
-   EXTLIBS=
+ifeq "$(USELUA)" "1"
+   # Lua stuff
+   LUA_S	=  lua/src/lapi.c lua/src/lauxlib.c lua/src/lbaselib.c lua/src/lcode.c lua/src/lcorolib.c lua/src/lctype.c \
+	   lua/src/ldblib.c lua/src/ldebug.c lua/src/ldo.c lua/src/ldump.c lua/src/lfunc.c lua/src/lgc.c lua/src/linit.c lua/src/liolib.c lua/src/llex.c \
+	   lua/src/lmathlib.c lua/src/lmem.c lua/src/loadlib.c lua/src/lobject.c lua/src/lopcodes.c lua/src/loslib.c lua/src/lparser.c \
+	   lua/src/lstate.c lua/src/lstring.c lua/src/lstrlib.c lua/src/ltable.c lua/src/ltablib.c lua/src/ltm.c \
+	   lua/src/lundump.c lua/src/lutf8lib.c lua/src/lvm.c lua/src/lzio.c lua.c
+
+   LUA_O	=  lua/src/lapi.o lua/src/lauxlib.o lua/src/lbaselib.o lua/src/lcode.o lua/src/lcorolib.o lua/src/lctype.o \
+	   lua/src/ldblib.o lua/src/ldebug.o lua/src/ldo.o lua/src/ldump.o lua/src/lfunc.o lua/src/lgc.o lua/src/linit.o lua/src/liolib.o lua/src/llex.o \
+	   lua/src/lmathlib.o lua/src/lmem.o lua/src/loadlib.o lua/src/lobject.o lua/src/lopcodes.o lua/src/loslib.o lua/src/lparser.o \
+	   lua/src/lstate.o lua/src/lstring.o lua/src/lstrlib.o lua/src/ltable.o lua/src/ltablib.o lua/src/ltm.o \
+	   lua/src/lundump.o lua/src/lutf8lib.o lua/src/lvm.o lua/src/lzio.o lua.o
+   CHK = $(shell uname -s|grep -c "Darwin")
+   ifeq "$(CHK)" "1"
+      EXTLIBS=
+      LUADEFS = -DLUA_USE_MACOSX
+   else
+      EXTLIBS=-lrt
+      LUADEFS = -DLUA_USE_POSIX
+   endif
 else
-   EXTLIBS=-lrt
+   LUA_S =
+   LUA_O =
+   EXTLIBS =
+   LUADEFS =
 endif
 
 CHK = $(shell which clang >/dev/null; echo $$?)
@@ -149,7 +170,7 @@ D_SRC	= door.c shs.c mushcrypt.c news.c mail.c mailfix.c debug.c senses.c \
 	  create.c game.c help.c look.c match.c move.c player.c predicates.c \
 	  rob.c set.c speech.c wiz.c walkdb.c timer.c boolexp.c log.c cque.c \
 	  unparse.c eval.c command.c wild.c netcommon.c functions.c vattr.c \
-	  db.c db_rw.c compress.c stringutil.c object.c conf.c flags.c htab.c \
+	  db.c db_rw.c compress.c stringutil.c bst.c object.c conf.c flags.c htab.c \
 	  compat.c file_c.c player_c.c bsd.c alloc.c autoreg.c levels.c \
           local.c utils.c pcre.c pcre_extensions.c tprintf.c sha1.c 64btime.c \
           sqlite.c websock2.c $(DR_SRC) $(MYSQL_C)
@@ -158,7 +179,7 @@ D_OBJ	= door.o shs.o mushcrypt.o news.o mail.o mailfix.o debug.o senses.o \
 	  create.o game.o help.o look.o match.o move.o player.o predicates.o \
 	  rob.o set.o speech.o wiz.o walkdb.o timer.o boolexp.o log.o cque.o \
 	  unparse.o eval.o command.o wild.o netcommon.o functions.o vattr.o \
-	  db.o db_rw.o compress.o stringutil.o object.o conf.o flags.o htab.o \
+	  db.o db_rw.o compress.o stringutil.o bst.o object.o conf.o flags.o htab.o \
           compat.o file_c.o player_c.o bsd.o alloc.o autoreg.o levels.o \
           local.o utils.o pcre.o pcre_extensions.o tprintf.o sha1.o 64btime.o \
           sqlite.o websock2.o $(DR_OBJ) $(MYSQL_O) $(HSPACE_O)
@@ -356,11 +377,18 @@ UDB_F	= $(UDBO_FLG)
 NET_S	= bsd.c
 NET_O	= bsd.o
 
+OS := $(shell uname -s)
+ifeq ($(OS),Darwin)
+	# ----- macos
+	DEFS += -I/opt/homebrew/include -L/opt/homebrew/lib
+	MORELIBS += -lssl -lcrypto
+endif
+
 # ================== END OF CONFIGURATION SECTION =================
 
 
 DEBUG	= $(OPTIM)
-ALLCFLAGS = $(CFLAGS) $(DEBUG) $(DEFS) $(MOREDEFS) $(D_FLG) $(WHO_F) $(RWHO_F) $(RLIM_F) $(UDB_F) -I$(incdir) $(CRYPT_SCHEME) $(CYGWIN)
+ALLCFLAGS = $(CFLAGS) $(DEBUG) $(DEFS) $(MOREDEFS) $(D_FLG) $(WHO_F) $(RWHO_F) $(RLIM_F) $(UDB_F) -I$(incdir) $(CRYPT_SCHEME) $(CYGWIN) $(LUADEFS)
 
 # Auxiliary source files: only used by offline utilities.
 # This one is for NON-html auto help creation
@@ -396,8 +424,8 @@ REINSTALL_TARG	= $(INSTALL_PROG) help.txt wizhelp.txt alias.conf compat.conf
 ALLSRC	= $(D_SRC) $(UDB_SRC) $(UDBA_SRC) $(UDBO_SRC) $(VER_SRC) \
 	  $(WHO_SRC) $(COM_SRC) $(SA_SRC) $(AUX_SRC) $(LIB_SRC)
 ALLINC	= $(D_INC) $(UDB_INC) $(VER_INC) $(NET_INC) $(LIB_INC)
-SRC	= $(D_SRC) $(COM_SRC) $(UDB_S) $(WHO_S)
-OBJ	= $(D_OBJ) $(COM_OBJ) $(UDB_O) $(WHO_O)
+SRC	= $(D_SRC) $(COM_SRC) $(UDB_S) $(WHO_S) $(LUA_S)
+OBJ	= $(D_OBJ) $(COM_OBJ) $(UDB_O) $(WHO_O) $(LUA_O)
 
 # Files in the standard distribution
 DIST	= $(ALLSRC) $(ALLINC) $(AUXIL)
@@ -405,8 +433,9 @@ DIST	= $(ALLSRC) $(ALLINC) $(AUXIL)
 OUT	= $(bindir)/netrhost $(bindir)/netrhost.debugmon $(bindir)/murboot \
           $(bindir)/mkhtml $(bindir)/mkindx $(bindir)/dbconvert
 
+
 .c.o:
-	$(CC) $(ALLCFLAGS) -c $<
+	$(CC) $(ALLCFLAGS) -c $< -o $@
 
 # paths is likely to remain broken
 all: rundate $(OUT)
@@ -451,7 +480,7 @@ debugmon.o: debugmon.c $(incdir)/debug.h
 	$(CC) -g $(ALLCFLAGS) -c debugmon.c
 
 $(bindir)/netrhost.debugmon: debugmon.o debug.o
-	$(CC) -o $(bindir)/netrhost.debugmon debugmon.o debug.o $(MORELIBS)
+	$(CC) -o $(bindir)/netrhost.debugmon debugmon.o debug.o $(DEFS) $(MORELIBS)
 
 $(bindir)/netrhost: $(OBJ) $(LIBOBJS)
 	$(CC) $(ALLCFLAGS) $(VER_FLG) -c $(VER_SRC)

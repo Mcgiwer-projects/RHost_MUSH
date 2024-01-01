@@ -1,8 +1,11 @@
 /* object.c - low-level object manipulation routines */
 
+#include <ctype.h>
+
 #include "copyright.h"
 #include "autoconf.h"
 
+#include "bst.h"
 #include "db.h"
 #include "mudconf.h"
 #include "command.h"
@@ -25,6 +28,7 @@ extern double NDECL(next_timer);
 extern int FDECL(alarm_msec, (double));
 extern void FDECL(show_desc_redir, (dbref, dbref, int));
 extern void FDECL(look_atrs_redir, (dbref, dbref, int, int, dbref, int));
+extern void FDECL(totem_clear, (dbref));
 
 static int check_type;
 
@@ -35,6 +39,8 @@ struct tagentry {
   dbref        tagref;
   int          i_personal;
 };
+
+BST *tag_tree = NULL;
 #endif
 
 #ifdef STANDALONE
@@ -759,48 +765,52 @@ destroy_obj(dbref player, dbref obj, int purge)
     s_Parent(obj, NOTHING);
     s_Exits(obj, NOTHING);
     if (purge) {
-	atr_free(obj);
-	s_Name(obj, NULL);
-	s_Flags3(obj, 0);
-	s_Flags4(obj, 0);
-	s_Toggles(obj, 0);
-	s_Toggles2(obj, 0);
-	s_Toggles3(obj, 0);
-	s_Toggles4(obj, 0);
-	s_Contents(obj, NOTHING);
-	s_Next(obj, NOTHING);
-	s_Owner(obj, GOD);
-	s_Pennies(obj, 0);
-	s_Flags(obj, (TYPE_THING | GOING));
-	s_Flags2(obj, 0);
+       atr_free(obj);
+       s_Name(obj, NULL);
+       s_Flags3(obj, 0);
+       s_Flags4(obj, 0);
+       s_Toggles(obj, 0);
+       s_Toggles2(obj, 0);
+       s_Toggles3(obj, 0);
+       s_Toggles4(obj, 0);
+       s_Contents(obj, NOTHING);
+       s_Next(obj, NOTHING);
+       s_Owner(obj, GOD);
+       s_Pennies(obj, 0);
+       s_Flags(obj, (TYPE_THING | GOING));
+       s_Flags2(obj, 0);
 #ifndef STANDALONE
-  TAGENT *tagentry;
-  char *tagrem, *tagremp, *s_strtok, *s_strtokr;
-  tagremp = tagrem = alloc_lbuf("tag_destpurge");
-  for (tagentry = (TAGENT *) hash_firstentry(&mudstate.objecttag_htab);
-       tagentry;
-       tagentry = (TAGENT *) hash_nextentry(&mudstate.objecttag_htab)) {
-      if( tagentry->tagref == obj) {
-        if(*tagrem) 
-          safe_chr(' ', tagrem, &tagremp);
-        safe_str(tagentry->tagname, tagrem, &tagremp);
-      }
-    }
-  s_strtok = strtok_r(tagrem, " ", &s_strtokr);
-  while( s_strtok ) {
-        objecttag_remove(s_strtok);
-        s_strtok = strtok_r(NULL, " ", &s_strtokr);
-      }
-  free_lbuf(tagrem);
+       /* clear totems */
+       totem_clear(obj);
+
+       TAGENT *tagentry;
+       char *tagrem, *tagremp, *s_strtok, *s_strtokr;
+
+       tagremp = tagrem = alloc_lbuf("tag_destpurge");
+       for (tagentry = (TAGENT *) hash_firstentry(&mudstate.objecttag_htab);
+            tagentry;
+            tagentry = (TAGENT *) hash_nextentry(&mudstate.objecttag_htab)) {
+          if( tagentry->tagref == obj) {
+             if(*tagrem) 
+                safe_chr(' ', tagrem, &tagremp);
+             safe_str(tagentry->tagname, tagrem, &tagremp);
+          }
+       }
+
+       s_strtok = strtok_r(tagrem, " ", &s_strtokr);
+       while( s_strtok ) {
+          objecttag_remove(s_strtok);
+          s_strtok = strtok_r(NULL, " ", &s_strtokr);
+       }
+       free_lbuf(tagrem);
 #endif
-  }
-    else {
-      s_Flags4(obj, Flags4(obj) & ~BOUNCE);
-      s_Flags2(obj, (Flags2(obj) | RECOVER) & ~BYEROOM);
-      s_Flags(obj, (Flags(obj) | HALT) & ~PUPPET);
-      s_Next(obj, Owner(obj));
-      s_Owner(obj, GOD);
-      s_Contents(obj, player);
+    } else {
+       s_Flags4(obj, Flags4(obj) & ~BOUNCE);
+       s_Flags2(obj, (Flags2(obj) | RECOVER) & ~BYEROOM);
+       s_Flags(obj, (Flags(obj) | HALT) & ~PUPPET);
+       s_Next(obj, Owner(obj));
+       s_Owner(obj, GOD);
+       s_Contents(obj, player);
     }
     cache_reset(0);
     return;
@@ -1164,6 +1174,9 @@ do_purge(dbref player, dbref cause, int key, char *buff)
 	s_Flags2(obj, 0);
 	s_Exits(obj, NOTHING);
 #ifndef STANDALONE
+	/* clear totems */
+	totem_clear(obj);
+
   TAGENT *tagentry;
   char *tagrem, *tagremp, *s_strtok, *s_strtokr;
   tagremp = tagrem = alloc_lbuf("tag_purge");
@@ -1386,6 +1399,9 @@ do_purge(dbref player, dbref cause, int key, char *buff)
 	    s_Link(obj, NOTHING);
 	    obj = owner;
 #ifndef STANDALONE
+      /* clear totems */
+      totem_clear(obj);
+
       TAGENT *tagentry;
       char *tagrem, *tagremp, *s_strtok, *s_strtokr;
       tagremp = tagrem = alloc_lbuf("tag_destpurge");
@@ -2344,6 +2360,8 @@ do_dbck(dbref player, dbref cause, int key)
     check_floating();
 #ifndef STANDALONE
     if (player != NOTHING) {
+        /* We want this as it's resetting the game for the most part */
+        mudstate.alarm_triggered = 0;
 	alarm_msec(next_timer());
 	if (!Quiet(player))
 	    notify(player, "Done.");
@@ -2358,6 +2376,21 @@ do_dbck(dbref player, dbref cause, int key)
  * Handle setting and reading tags through @tag and tag(), and initial
  * loading in game.c
  */
+
+// tag_compare_func is a comparison function for btree logic that sorts tags.
+// personal/local tags will be sorted at the end of the list.
+int tag_compare_func(const void *a, const void *b) {
+    TAGENT *tagA = (TAGENT *)a;
+    TAGENT *tagB = (TAGENT *)b;
+
+    if (tagA->i_personal && !tagB->i_personal) {
+        return 1;
+    } else if (!tagA->i_personal && tagB->i_personal) {
+        return -1;
+    } else {
+        return strcmp(tagA->tagname, tagB->tagname);
+    }
+}
 
 int objecttag_add(char *tag, dbref thing, int i_personal, int i_loader)
 {
@@ -2423,8 +2456,15 @@ int objecttag_add(char *tag, dbref thing, int i_personal, int i_loader)
 
   stat = hashadd2(lcname, (int *)newtag, &mudstate.objecttag_htab, 0);
   stat = (stat < 0) ? 0 : 1;
-  if(stat == 0)
+  if(stat == 0) {
     free(newtag);
+  } else {
+  	// good add to the hash table.  add to our bst.
+  	if (tag_tree == NULL) {
+  		tag_tree = bst_create(tag_compare_func);
+  	}
+  	bst_insert(tag_tree, newtag);
+  }
 
   nattrp = nattr = alloc_lbuf("add_tagattr"); 
   (void) atr_get_str(astr, thing, A_OBJECTTAG, &aowner, &aflags);
@@ -2556,6 +2596,8 @@ int objecttag_remove(char *tag)
     atr_add_raw(storedtag->tagref, A_OBJECTTAG, astr2);
   }
 
+  bst_delete(tag_tree, storedtag, NULL);
+
   free_lbuf(astr);
   free_lbuf(astr2);
 
@@ -2573,6 +2615,7 @@ int objecttag_list(char* buff)
   char *s_hashstr, *s_buffp;
   int i_first;
   TAGENT *storedtag;
+  BSTNode *node;
 
   if( !buff )
     return 0;
@@ -2580,9 +2623,8 @@ int objecttag_list(char* buff)
   s_hashstr = alloc_lbuf("objecttag_list");
   s_buffp = buff;
   i_first = 0;
-  for (storedtag = (TAGENT *) hash_firstentry(&mudstate.objecttag_htab);
-   storedtag;
-   storedtag = (TAGENT *) hash_nextentry(&mudstate.objecttag_htab)) {
+  for (node = bst_next_node(tag_tree, NULL); node; node = bst_next_node(tag_tree, node)) {
+    storedtag = (TAGENT *)node->data;
     if(storedtag) {
       if ( i_first ) {
         safe_chr(' ', buff, &s_buffp);
@@ -2600,9 +2642,10 @@ void objecttag_match(char *buff, char *match)
 {
   TAGENT *storedtag;
   char* buffp = buff;
-  for (storedtag = (TAGENT *) hash_firstentry(&mudstate.objecttag_htab);
-   storedtag;
-   storedtag = (TAGENT *) hash_nextentry(&mudstate.objecttag_htab)) {
+  BSTNode *node;
+
+  for (node = bst_next_node(tag_tree, NULL); node; node = bst_next_node(tag_tree, node)) {
+    storedtag = (TAGENT *)node->data;
     if(storedtag) {
       if(quick_wild(match, storedtag->tagname)) {
         safe_str(storedtag->tagname, buff, &buffp);
@@ -2617,39 +2660,92 @@ void decompile_tags(dbref player, dbref thing, char *thingname, char *qualout, i
     char *buff, *buffp, *tbuff, *s_tbuff;
     int i_first;
     TAGENT *storedtag;
+    BSTNode *node;
 
     buffp = buff = alloc_lbuf("decompile_tags");
     tbuff = alloc_mbuf("decompile_tags");
     i_first = 0;
-    
-    for (storedtag = (TAGENT *) hash_firstentry(&mudstate.objecttag_htab);
-      storedtag;
-      storedtag = (TAGENT *) hash_nextentry(&mudstate.objecttag_htab)) {
+
+    for (node = bst_next_node(tag_tree, NULL); node; node = bst_next_node(tag_tree, node)) {
+        storedtag = (TAGENT *)node->data;
         if(storedtag) {
-        if(storedtag->tagref == thing) {
-          if ( i_first ) {
-             safe_str("\n", buff, &buffp);
-          }
-          i_first = 1;
-          if ( storedtag->i_personal ) {
-             s_tbuff = strchr(storedtag->tagname+3, '_')+1;
-             sprintf(tbuff, "%s@ltag/add %s=%s", (i_tf ? qualout : (char *)""), s_tbuff, thingname);
-          } else {
-             sprintf(tbuff, "%s@tag/add %s=%s", (i_tf ? qualout : (char *)""), storedtag->tagname, thingname);
-          }
-          safe_str(tbuff, buff, &buffp);
+            if(storedtag->tagref == thing) {
+                if ( i_first ) {
+                    safe_str("\n", buff, &buffp);
+                }
+                i_first = 1;
+                if ( storedtag->i_personal ) {
+                    s_tbuff = strchr(storedtag->tagname+3, '_')+1;
+                    sprintf(tbuff, "%s@ltag/add %s=%s", (i_tf ? qualout : (char *)""), s_tbuff, thingname);
+                } else {
+                    sprintf(tbuff, "%s@tag/add %s=%s", (i_tf ? qualout : (char *)""), storedtag->tagname, thingname);
+                }
+                safe_str(tbuff, buff, &buffp);
+            }
         }
-      }
     }
+
     noansi_notify(player, buff); 
     free_mbuf(tbuff);
     free_lbuf(buff);
 }
 
+// is_valid_tagname_with_unicode checks if a tagname is valid. unicode characters are legal.
+// Valid tag names are comprised of 0-9, a-z, A-Z, _, -, and unicode characters.
+// They must have at least one non-numeric character (to avoid collisions with dbrefs).
+// Returns 1 if valid, 0 if not.
+char is_valid_tagname(char *tagname) {
+    char *c = tagname;
+    int hex_count = 0;
+    int valid = 0;
+
+    if (!c) {
+        return 0;
+    }
+
+    while (*c) {
+        if (*c == '%') {
+            // check for unicode sequence start
+            if (*(c + 1) && *(c + 1) == '<' && *(c + 2) && *(c + 2) == 'u') {
+                c += 3; // move to the start of the hex digits
+                hex_count = 0;
+
+                while (*c && isxdigit(*c) && hex_count < 4) {
+                    hex_count++;
+                    c++;
+                }
+
+                if (hex_count != 4 || *c != '>') {
+                    // invalid Unicode sequence
+                    return 0;
+                }
+                valid = 1; // valid non-numeric character found
+            } else {
+                // '%' not part of a valid Unicode sequence
+                return 0;
+            }
+        } else if (isalnum(*c) || (*c == '_') || (*c == '-')) {
+            if (!valid && !isdigit(*c)) {
+                 valid = 1;
+            }
+        } else {
+            // Invalid character
+            return 0;
+        }
+
+        c++;
+    }
+
+    return valid;
+}
+
 void do_tag(dbref player, dbref cause, int key, char *s_tagname, char *target)
 {
   char *buff, *buffp, *s_hashstr, *tagname, *t_distag, t_warn = ' ';
-  TAGENT *storedtag;
+  ANSISPLIT outsplit[LBUF_SIZE];
+  TAGENT *storedtag = NULL;
+  BSTNode *node = NULL;
+  char *s_buff = NULL;
   int result, i_personal, *hashp, i_total, i_start, i_count, i_page, i_pagetot;
   dbref p;
 
@@ -2677,7 +2773,10 @@ void do_tag(dbref player, dbref cause, int key, char *s_tagname, char *target)
 
   switch (key) {
      case TAG_ADD: /* tag add */
-        if( !*tagname || ((*tagname == '_') && !i_personal) ) {
+        if( !*tagname
+            || ((*tagname == '_') && !i_personal)
+            || !is_valid_tagname(tagname) )
+        {
            notify(player,"#-1 No tagname or invalid tagname specified.");
         } else if (!*target) {
            notify(player,"#-1 No dbref specified.");
@@ -2751,13 +2850,16 @@ void do_tag(dbref player, dbref cause, int key, char *s_tagname, char *target)
               }
               if ( i_start < 1 ) {
                  i_start = 0;
+                 i_pagetot = (i_total / 20) + 1;
+              } else {
+                 if ( i_start > ((i_total / 20) + 1) ) {
+                    i_start = (i_total / 20) + 1;
+                 }
+                 i_pagetot = (i_total / 20) + 1;
+                 // i_page = i_start + 1;
+                 i_page = i_start;
+                 i_start = ((i_start - 1) * 20) + 1;
               }
-              if ( i_start > (i_total / 20) ) {
-                 i_start = (i_total / 20);
-              }
-              i_pagetot = (i_total / 20) + 1;
-              i_page = i_start + 1;
-              i_start *= 20;
               /* Paged value -- we want null tagname now */
               *tagname = '\0';
            } else if ( !*tagname ) {
@@ -2766,68 +2868,63 @@ void do_tag(dbref player, dbref cause, int key, char *s_tagname, char *target)
                    storedtag = (TAGENT *) hash_nextentry(&mudstate.objecttag_htab)) {
                  i_total++;
               }
-              i_start = 0;
               i_pagetot = (i_total / 20) + 1;
-              i_page = i_start + 1;
-              i_start *= 20;
+              i_start = 1;
+              i_page = 1;
            }
-          
+
            /* Notify header */
            notify(player, buff);
            *buff = '\0';
-           for (storedtag = (TAGENT *) hash_firstentry(&mudstate.objecttag_htab);
-                storedtag;
-                storedtag = (TAGENT *) hash_nextentry(&mudstate.objecttag_htab)) {
+
+           // display the requested tags
+           for (node = bst_next_node(tag_tree, NULL); node; node = bst_next_node(tag_tree, node)) {
+              storedtag = (TAGENT *)node->data;
               if(storedtag) {
                  if ( !*tagname ) {
                     i_count++;
                     if ( i_count < i_start ) {
                        continue;
                     }
-                    if ( i_count > (i_start + 20) ) {
+                    if ( i_start && (i_count > (i_start + 19)) ) {
                        break;
                     }
                  }
-                 if(*tagname) {
-                    if(quick_wild(tagname, storedtag->tagname)) {
-                       if ( i_personal ) {
-                          t_warn = ' ';
-                          t_distag = strchr(storedtag->tagname+3, '_') + 1;
-                          hashp = hashfind(t_distag, &mudstate.objecttag_htab);
-                          if ( hashp ) {
+
+                 if (!*tagname || quick_wild(tagname, storedtag->tagname)) {
+                     t_warn = ' ';
+                     t_distag = storedtag->tagname;
+
+                     s_buff = alloc_lbuf("objecttag_list");
+                     memset(s_buff, '\0', LBUF_SIZE);
+                     split_ansi(strip_ansi(storedtag->tagname), s_buff, outsplit);
+
+                     if (i_personal) {
+                         t_distag = strchr(storedtag->tagname + 3, '_') + 1;
+                         if (hashfind(t_distag, &mudstate.objecttag_htab)) {
                              t_warn = 'W';
-                          }
-                          sprintf(s_hashstr, "%c  %-32s | %-8s | #%d", t_warn, t_distag,
-                                  (char *)(storedtag->i_personal ? "- Yes -" : " "), storedtag->tagref);
-                       } else {
-                          sprintf(s_hashstr, " %-32s | %-8s | #%d", storedtag->tagname, 
-                                  (char *)(storedtag->i_personal ? "- Yes -" : " "), storedtag->tagref);
-                       }
-                       // safe_str(s_hashstr, buff, &buffp);
-                       notify(player, s_hashstr);
-                    }
-                 } else {
-                    if ( i_personal ) {
-                          t_warn = ' ';
-                          t_distag = strchr(storedtag->tagname+3, '_') + 1;
-                          hashp = hashfind(t_distag, &mudstate.objecttag_htab);
-                          if ( hashp ) {
-                             t_warn = 'W';
-                          }
-                          sprintf(s_hashstr, "%c  %-32s | %-8s | #%d", t_warn, t_distag,
-                                  (char *)(storedtag->i_personal ? "- Yes -" : " "), storedtag->tagref);
-                    } else {
-                       sprintf(s_hashstr, " %-32s | %-8s | #%d", storedtag->tagname,
-                                  (char *)(storedtag->i_personal ? "- Yes -" : " "), storedtag->tagref);
-                    }
-                    // safe_str(s_hashstr, buff, &buffp);
-                    notify(player, s_hashstr);
+                         }
+                     }
+
+                     sprintf(s_hashstr, "%c %-*s | %-8s | #%d",
+                             t_warn,
+                             (32 + strlen(t_distag) - strlen(s_buff)),
+                             t_distag,
+                             (i_personal ? "- Yes -" : " "), storedtag->tagref);
+
+                     free_lbuf(s_buff);
+                     notify(player, s_hashstr);
                  }
               }
            }
+
            if ( i_personal )  {
               if ( !*tagname ) {
-                 sprintf(buff, "== Page %4d/%4d ======================================\r\n", i_page, i_pagetot);
+                 if ( i_start ) {
+                    sprintf(buff, "== Page %4d/%4d ======================================\r\n", i_page, i_pagetot);
+                 } else {
+                    sprintf(buff, "== All %4d Pages ======================================\r\n", i_pagetot);
+                 }
               } else {
                  strcpy(buff, (char *)"==========================================================\r\n");
               }
@@ -2837,6 +2934,11 @@ void do_tag(dbref player, dbref cause, int key, char *s_tagname, char *target)
            } else {
               if ( !*tagname ) {
                  sprintf(buff, "== Page %4d/%4d ======================================", i_page, i_pagetot);
+                 if ( i_start ) {
+                    sprintf(buff, "== Page %4d/%4d ======================================", i_page, i_pagetot);
+                 } else {
+                    sprintf(buff, "== All %4d Pages ======================================", i_pagetot);
+                 }
               } else {
                   strcpy(buff, (char *)"==========================================================");
               }
@@ -2864,3 +2966,92 @@ void do_tag(dbref player, dbref cause, int key, char *s_tagname, char *target)
   free_lbuf(tagname);
 }
 #endif
+
+int obj_bitlevel(dbref target)
+{
+   int res;
+
+   if(!Good_obj(target))
+       res = -1;
+   else if( God(target) )
+       res = 7;
+    else if( Immortal(target) )
+       res = 6;
+    else if( Wizard(target) )
+       res = 5;
+    else if( Admin(target) )
+       res = 4;
+    else if( Builder(target) )
+       res = 3;
+    else if( Guildmaster(target) )
+       res = 2;
+    else if( Wanderer(target) || Guest(target) )
+       res = 0;
+    else
+       res = 1;
+	  
+	return res;
+}
+
+int obj_nomodlevel(dbref thing)
+{
+    char* buff, *s_strtok, *s_strtokr;
+    int res=5, aflags;
+    dbref aowner;
+    if(mudconf.imm_nomod)
+        res=6;
+    if(!Good_chk(thing))
+        return -1;
+    buff = alloc_lbuf("nomod.level");  
+    (void) atr_get_str(buff, thing, A_FLAGLEVEL, &aowner, &aflags);
+    if(buff)
+    {
+        s_strtok = strtok_r(buff, " \t", &s_strtokr);
+        if (s_strtok && *s_strtok)
+        {
+            if(!is_number(s_strtok))
+                res = -1;
+            else
+                res = atoi(s_strtok);
+            if(res == -1)
+            {
+                if(mudconf.imm_nomod)
+                    res=6;
+                else
+                    res=5;
+            }
+        }
+    }
+    free_lbuf(buff);
+    return res;
+}
+
+int obj_noexlevel(dbref thing)
+{
+    char* buff, *s_strtok, *s_strtokr;
+    int res=5, aflags;
+    dbref aowner;
+    if(!Good_chk(thing))
+        return -1;
+    buff = alloc_lbuf("noex.level");  
+    (void) atr_get_str(buff, thing, A_FLAGLEVEL, &aowner, &aflags);
+    if(buff)
+    {
+        s_strtok = strtok_r(buff, " \t", &s_strtokr);
+        if (s_strtok && *s_strtok)
+        {
+            s_strtok = strtok_r(NULL, " \t", &s_strtokr);
+            if (s_strtok && *s_strtok)
+            {
+                if(!is_number(s_strtok))
+                    res = -1;
+                else
+                    res = atoi(s_strtok);
+                if(res == -1)
+                    res=5;
+            }
+        }
+    }
+    free_lbuf(buff);
+    return res;
+}
